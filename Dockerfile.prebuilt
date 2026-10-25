@@ -1,0 +1,6 @@
+# Use after npm ci && npm run typecheck && npm run build.
+FROM registry.access.redhat.com/ubi9/nginx-124:latest
+COPY dist /usr/share/nginx/html
+USER 1001
+EXPOSE 9443
+ENTRYPOINT ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,4 @@
+Resource Relationships
+Custom implementation based on openshift/console-plugin-template release-4.22.
+The template's Apache License 2.0 is included as LICENSE.
+Third-party dependencies retain their respective licenses. Bundled JavaScript license notices are retained in dist/.

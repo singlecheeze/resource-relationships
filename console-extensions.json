@@ -1,0 +1,21 @@
+[
+  {
+    "type": "console.page/route",
+    "properties": {
+      "path": "/resource-relationships",
+      "component": {
+        "$codeRef": "RelationshipsPage"
+      }
+    }
+  },
+  {
+    "type": "console.navigation/href",
+    "properties": {
+      "id": "resource-relationships",
+      "name": "Resource Relationships",
+      "href": "/resource-relationships",
+      "perspective": "admin",
+      "section": "home"
+    }
+  }
+]

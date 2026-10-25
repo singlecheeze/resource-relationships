@@ -1,0 +1,7 @@
+node_modules
+.git
+.yarn
+test-results
+playwright-report
+preview-dist
+*.zip
