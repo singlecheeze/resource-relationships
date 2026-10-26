@@ -20,8 +20,11 @@ async function scenario(allowed) {
         const u = new URL(url, 'http://localhost'), p = u.pathname.replace('/api/kubernetes', '');
         const object = { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'settings', namespace: 'default', uid: 'config-uid', resourceVersion: '7' }, data: { greeting: 'hello' } };
         let data = {}, status = 200;
-        if (p === '/apis') data = { groups: [] };
-        else if (p === '/api/v1') data = { resources: ['configmaps','pods'].map(name => ({ name, kind: name === 'pods' ? 'Pod' : 'ConfigMap', namespaced: true, verbs: ['get','list','update'] })) };
+        if (p === '/openapi/v3') data = { paths: { 'api/v1': { serverRelativeURL: '/openapi/v3/api/v1' } } };
+        else if (p === '/openapi/v3/api/v1') data = { components: { schemas: { ConfigMap: { 'x-kubernetes-group-version-kind': [{ group: '', version: 'v1', kind: 'ConfigMap' }], properties: { data: { type: 'object', additionalProperties: { type: 'string' } } } } } } };
+        else if (p === '/apis') data = { groups: [] };
+        else if (p === '/api/v1') data = { resources: ['configmaps','pods','services'].map(name => ({ name, kind: name === 'pods' ? 'Pod' : name === 'services' ? 'Service' : 'ConfigMap', namespaced: true, verbs: ['get','list','update'] })) };
+        else if (p.endsWith('/services')) data = { items: [{ apiVersion: 'v1', kind: 'Service', metadata: { name: 'demo-service', namespace: 'default', uid: 'service-uid', resourceVersion: '1' }, spec: { selector: { app: 'demo' } } }] };
         else if (p.endsWith('/pods')) { data = { message: 'pods forbidden' }; status = 403; }
         else if (p.endsWith('selfsubjectaccessreviews')) data = { status: { allowed } };
         else if (opts.method === 'PUT') {
@@ -54,6 +57,27 @@ async function scenario(allowed) {
     const el = getByRole(doc.body,'textbox',{name:'Resource YAML',exact:true});
     assert.ok(el.value.includes('greeting: hello')); return el;
   });
+  const originalDraft = yaml.value;
+  fireEvent.click(button('Store application settings'));
+  const example = await wait(() => getByRole(doc.body, 'textbox', { name: 'Example YAML: Store application settings', exact: true }));
+  assert.equal(example.readOnly, true);
+  assert.ok(example.value.includes('LOG_LEVEL: info'));
+  assert.equal(yaml.value, originalDraft);
+  assert.equal(saves, 0); assert.equal(dryRuns, 0);
+  fireEvent.keyDown(example, { key: 's', ctrlKey: true });
+  assert.equal(saves, 0);
+  fireEvent.click(button('Store application settings'));
+  await wait(() => assert.ok(!queryByRole(doc.body, 'textbox', { name: 'Example YAML: Store application settings', exact: true })));
+  assert.equal(yaml.value, originalDraft);
+  const about = button('About ConfigMap');
+  assert.equal(about.getAttribute('aria-expanded'), 'false');
+  fireEvent.click(about);
+  await wait(() => assert.equal(about.getAttribute('aria-expanded'), 'true'));
+  getByText(doc.body, /Stores non-confidential configuration/);
+  fireEvent.click(button('YAML editor help and keyboard shortcuts'));
+  await wait(() => getByText(doc.body, 'Keyboard shortcuts', { exact: true }));
+  getByText(doc.body, /Request a save only after the exact draft/);
+  fireEvent.click(button('Close YAML editor help'));
   if (allowed) {
     await wait(() => assert.equal(yaml.readOnly,false));
     fireEvent.change(yaml,{target:{value:yaml.value.replace('hello','welcome')}});
@@ -83,6 +107,7 @@ async function scenario(allowed) {
     fireEvent.click(getByRole(doc.body,'tab',{name:'ConfigMap/default/settings *',exact:true}));
     await wait(() => assert.ok(getByRole(doc.body,'textbox',{name:'Resource YAML',exact:true}) === yaml));
     assert.ok(yaml.value.includes('another'));
+    assert.equal(button('About ConfigMap').getAttribute('aria-expanded'), 'true');
     // Reopening the same object selects it without duplicate tabs or re-fetching its draft.
     fireEvent.contextMenu(getByText(doc.body,'ConfigMap: settings',{exact:true}),{clientX:100,clientY:100});
     fireEvent.click(await wait(() => getByRole(doc.body,'menuitem',{name:'Open YAML'})));
@@ -119,6 +144,14 @@ async function scenario(allowed) {
   } else {
     assert.equal(yaml.readOnly,true); assert.equal(button('Save changes').disabled,true);
   }
+  // Networking is a separate inventory; editor drafts are unaffected by changing views.
+  fireEvent.change(getByRole(doc.body, 'combobox', { name: 'Explorer view' }), { target: { value: 'networking' } });
+  await wait(() => getByText(doc.body, 'Project: default', { exact: true }));
+  for (const name of ['Project: default', 'Services & endpoints', 'Service']) {
+    const label = await wait(() => getByText(doc.body, name, { exact: true }));
+    fireEvent.click(label);
+  }
+  await wait(() => getByText(doc.body, 'Service: demo-service', { exact: true }));
   assert.deepEqual(errors, []);
   dom.window.close();
 }

@@ -3,9 +3,22 @@ import { Alert, Button, Spinner } from '@patternfly/react-core';
 import { canUpdate, errorText, getResource, updateResource } from '../lib/api';
 import { editableYaml, parseEdit } from '../lib/editor';
 import { LoadedResource } from '../lib/model';
+import { ConsoleYamlEditor } from './ConsoleYamlEditor';
+import { SchemaBundle } from '../lib/schema';
+import { loadSchema } from '../lib/schema-api';
+import { ResourceAbout, EditorHelp } from './ResourceEditorHelp';
+import { ResourceExamples } from './ResourceExamples';
 
 type Props = { resource: LoadedResource; onState: (uid: string, dirty: boolean, busy: boolean) => void; onClose: () => void; onSaved: (r: LoadedResource) => void };
 export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
+  const [schema, setSchema] = React.useState<SchemaBundle>();
+  const [schemaMessage, setSchemaMessage] = React.useState('Loading schema…');
+  React.useEffect(() => {
+    let active = true;
+    loadSchema(resource.type).then(result => { if (active) { setSchema(result); setSchemaMessage(result.source); } })
+      .catch(() => { if (active) setSchemaMessage('Schema unavailable or access denied. YAML editing and server validation remain available.'); });
+    return () => { active = false; };
+  }, [resource.type]);
   const [current, setCurrent] = React.useState<LoadedResource>();
   const [text, setText] = React.useState('');
   const [baseline, setBaseline] = React.useState('');
@@ -57,18 +70,27 @@ export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
   return <aside className="resource-relationships__editor" aria-label="Resource YAML editor">
     <div className="resource-relationships__row">
       <h2>YAML · {resource.object.kind}/{resource.object.metadata.name}</h2>
+      <EditorHelp />
       <Button variant="plain" onClick={onClose} isDisabled={busy} aria-label="Close YAML editor">Close</Button>
     </div>
-    <p>{current?.object.metadata.namespace || 'Cluster scoped'} · {allowed ? 'Editable' : 'Read-only'}{dirty ? ' · Unsaved changes' : ''}</p>
-    <p className="resource-relationships__muted">Status and managed fields are excluded. Saving replaces the object’s editable fields; removing a field may clear it. Save before navigating away.</p>
+    <p>{resource.object.metadata.namespace || 'Cluster scoped'} · {allowed ? 'Editable' : 'Read-only'}{dirty ? ' · Unsaved changes' : ''}</p>
+    <ResourceAbout resource={current || resource} schema={schema} />
     {message && <Alert isInline variant={failed ? 'danger' : 'success'} title={message} />}
     {busy && <Spinner size="md" aria-label="Loading or validating YAML" />}
-    <textarea aria-label="Resource YAML" className="resource-relationships__yaml" spellCheck={false}
-      value={text} readOnly={!allowed || busy} onChange={e => { setText(e.target.value); setReviewed(null); }} />
+    <p className="resource-relationships__muted">{schemaMessage}</p>
+
+    <div className="resource-relationships__editor-layout">
+    <div className="resource-relationships__editor-main">
+    <ConsoleYamlEditor value={text} readOnly={!allowed || busy} schema={schema}
+      onChange={next => { setText(next); setReviewed(null); }}
+      onSave={() => { if (allowed && !busy && dirty && reviewed === text) void save(false); }} />
     <div className="resource-relationships__row">
       <Button variant="secondary" isDisabled={!current || !allowed || busy || !dirty} onClick={() => void save(true)}>Validate on server</Button>
       <Button variant="primary" isDisabled={!allowed || busy || !dirty || reviewed !== text} onClick={() => void save(false)}>Save changes</Button>
       <Button variant="link" isDisabled={busy} onClick={() => { if (!dirty || window.confirm('Discard unsaved YAML and reload from the server?')) void load(); }}>Reload YAML</Button>
+    </div>
+    </div>
+    <ResourceExamples type={resource.type} />
     </div>
   </aside>;
 }

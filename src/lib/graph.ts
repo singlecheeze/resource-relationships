@@ -1,4 +1,5 @@
 import { Edge, Graph, LoadedResource, Resource } from './model';
+import { addNetworkRelationships } from './networking';
 
 /** Ownership is joined on UID, never on a coincidentally reused name. */
 export function buildGraph(resources: LoadedResource[]): Graph {
@@ -10,7 +11,7 @@ export function buildGraph(resources: LoadedResource[]): Graph {
   const group = (api: string) => api.includes('/') ? api.split('/')[0] : '';
   const key = (g: string, k: string, ns: string | undefined, n: string) => `${g}|${k}|${ns || ''}|${n}`;
   resources.forEach(({ object: o }) => index.set(key(group(o.apiVersion), o.kind, o.metadata.namespace, o.metadata.name), o.metadata.uid));
-  const missing = (uid: string, text: string) => unresolved.set(uid, [...(unresolved.get(uid) || []), text]);
+  const missing = (uid: string, text: string) => { const values = unresolved.get(uid) || []; if (!values.includes(text)) unresolved.set(uid, [...values, text]); };
   const edge = (from: string, to: string, relation: string, evidence: string) => {
     const id = `${from}|${to}|${relation}|${evidence}`;
     if (!seen.has(id)) { seen.add(id); edges.push({ from, to, relation, evidence }); }
@@ -81,11 +82,14 @@ export function buildGraph(resources: LoadedResource[]): Graph {
       ref(o, '', 'Service', o.metadata.labels?.['kubernetes.io/service-name'], 'belongs to', 'metadata.labels.kubernetes.io/service-name');
       for (const e of o.endpoints || []) {
         const t = e.targetRef;
-        if (t?.uid && nodes.has(t.uid)) edge(uid, t.uid, 'endpoint for', 'endpoints.targetRef.uid');
-        else if (t?.name) ref(o, group(t.apiVersion || 'v1'), t.kind, t.name, 'endpoint for', 'endpoints.targetRef', t.namespace || o.metadata.namespace);
+        if (t?.uid) {
+          if (nodes.has(t.uid)) edge(uid, t.uid, 'endpoint for', `endpoints.targetRef.uid; addresses=${e.addresses?.join(',')} ready=${String(e.conditions?.ready ?? 'unknown')}`);
+          else missing(uid, `Endpoint target ${t.kind}/${t.name} UID ${t.uid} not loaded; addresses=${e.addresses?.join(',')}`);
+        } else if (t?.name) ref(o, group(t.apiVersion || 'v1'), t.kind, t.name, 'endpoint for', 'endpoints.targetRef', t.namespace || o.metadata.namespace);
       }
     }
   }
+  addNetworkRelationships(resources, { edge, ref, missing });
   return { nodes, edges, unresolved };
 }
 

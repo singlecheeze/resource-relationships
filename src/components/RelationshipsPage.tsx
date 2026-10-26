@@ -5,10 +5,13 @@ import { defaultTypes, discover, errorText, loadResources } from '../lib/api';
 import { buildGraph, walkGraph, WalkNode } from '../lib/graph';
 import { LoadedResource, ResourceType, typeKey } from '../lib/model';
 import { YamlPane } from './YamlPane';
+import { networkGroup, networkGroups, networkTypes } from '../lib/networking';
 import './relationships.css';
 
 type Menu = { uid: string; x: number; y: number };
 export default function RelationshipsPage() {
+  const [view, setView] = React.useState('all');
+  const [infra, setInfra] = React.useState(true);
   const [types, setTypes] = React.useState<ResourceType[]>([]);
   const [enabled, setEnabled] = React.useState<string[]>([]);
   const [namespace, setNamespace] = React.useState('default');
@@ -84,11 +87,21 @@ export default function RelationshipsPage() {
     try {
       const result = await loadResources(types.filter(t => enabled.includes(typeKey(t)) && (t.namespaced || cluster)), namespace.trim(), controller.current.signal);
       if (id !== generation.current) return;
+      if (infra && view === 'networking') {
+        // Operator configuration lives outside the application project. Load only the relevant types there.
+        for (const operatorNamespace of ['openshift-ingress-operator', 'openshift-sriov-network-operator']) {
+          if (operatorNamespace === namespace.trim()) continue;
+          const extras = await loadResources(types.filter(t => enabled.includes(typeKey(t)) && t.namespaced &&
+            (operatorNamespace === 'openshift-ingress-operator' ? typeKey(t) === 'ingresscontrollers.operator.openshift.io' : t.group === 'sriovnetwork.openshift.io')), operatorNamespace, controller.current.signal);
+          if (id !== generation.current) return;
+          result.resources.push(...extras.resources); result.warnings.push(...extras.warnings.map(w => `${operatorNamespace}: ${w}`));
+        }
+      }
       setResources(result.resources); setWarnings(result.warnings); setLoadedScope(namespace.trim()); setRoot(''); setSelected(undefined);
     } catch (e) { if (id === generation.current) setWarnings([errorText(e)]); }
     finally { if (id === generation.current) setBusy(false); }
   }
-  const label = (r: LoadedResource) => `${r.object.kind}: ${r.object.metadata.name}`;
+  const label = (r: LoadedResource) => `${r.object.kind}: ${r.object.metadata.name}${r.object.metadata.namespace && r.object.metadata.namespace !== loadedScope ? ` (${r.object.metadata.namespace})` : ''}`;
   const renderNode = (n: WalkNode, path: string): TreeViewDataItem => {
     const r = graph.nodes.get(n.uid)!;
     const id = `${path}/${n.uid}`;
@@ -108,28 +121,44 @@ export default function RelationshipsPage() {
       action: <button className="resource-relationships__more" aria-label={`Actions for ${label(r)}`} onClick={e => {
         e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); showMenu(n.uid, rect.left, rect.bottom);
       }}>⋮</button>,
-      children: n.children.length ? n.children.map((child, i) => renderNode(child, `${id}/${i}`)) : undefined,
+      children: n.children.length ? [...new Set(n.children.map(child => child.edge?.relation || 'Related'))].map(relation => ({
+        id: `${id}/group/${relation}`, name: relation, defaultExpanded: true,
+        children: n.children.filter(child => (child.edge?.relation || 'Related') === relation).map((child, i) => renderNode(child, `${id}/${relation}/${i}`)),
+      })) : undefined,
     };
   };
-  const matches = resources.filter(r => `${label(r)} ${r.object.metadata.namespace || ''}`.toLowerCase().includes(search.toLowerCase()))
+  const matches = resources.filter(r => (view === 'all' || networkTypes.has(typeKey(r.type))) && `${label(r)} ${r.object.metadata.namespace || ''}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => label(a).localeCompare(label(b)));
   const visible = matches.slice(0, 150);
   const focused = root && graph.nodes.has(root) ? graph.nodes.get(root) : undefined;
-  const tree: TreeViewDataItem[] = focused
-    ? [renderNode(walkGraph(graph, root, direction, depth), 'focus')]
-    : [...new Set(visible.map(r => r.object.kind))].map(kind => ({ id: `kind-${kind}`, name: kind, defaultExpanded: true,
-      children: visible.filter(r => r.object.kind === kind).map(r => renderNode({ uid: r.object.metadata.uid, cycle: false, children: [] }, kind)),
+  const kindTree = (items: LoadedResource[], prefix: string): TreeViewDataItem[] => [...new Set(items.map(r => typeKey(r.type)))].map(key => ({
+    id: `${prefix}/kind-${key}`, name: items.find(r => typeKey(r.type) === key)!.object.kind, defaultExpanded: true,
+    children: items.filter(r => typeKey(r.type) === key).map(r => renderNode({ uid: r.object.metadata.uid, cycle: false, children: [] }, `${prefix}/${key}`)),
+  }));
+  const tree: TreeViewDataItem[] = focused ? [renderNode(walkGraph(graph, root, direction, depth), 'focus')]
+    : view === 'all' ? kindTree(visible, 'inventory')
+    : [...new Set(visible.map(r => r.type.namespaced ? `Project: ${r.object.metadata.namespace}` : 'Cluster networking'))].map(scope => ({
+      id: scope, name: scope, defaultExpanded: true,
+      children: Object.keys(networkGroups).flatMap(group => {
+        const items = visible.filter(r => networkGroup(r) === group && (r.type.namespaced ? `Project: ${r.object.metadata.namespace}` : 'Cluster networking') === scope);
+        return items.length ? [{ id: `${scope}/${group}`, name: group, defaultExpanded: true, children: kindTree(items, `${scope}/${group}`) }] : [];
+      }),
     }));
   const selectedUid = selected?.id?.split('/').at(-1);
   return <main className="resource-relationships__page">
     <h1>Resource Relationships</h1>
     <p>Explore ownership and references. Right-click a resource, or use its ⋮ menu, to open YAML or follow its relationships.</p>
     <div className="resource-relationships__toolbar">
+      <label>View <select aria-label="Explorer view" value={view} onChange={e => { setView(e.target.value); setRoot(''); setSelected(undefined); }}>
+        <option value="all">All resources</option><option value="networking">Networking</option>
+      </select></label>
       <label>Namespace <input aria-label="Namespace" value={namespace} onChange={e => setNamespace(e.target.value)} /></label>
       <label><input type="checkbox" checked={cluster} onChange={e => setCluster(e.target.checked)} /> Include selected cluster-scoped types</label>
+      {view === 'networking' && <label><input type="checkbox" checked={infra} onChange={e => setInfra(e.target.checked)} /> Include ingress / SR-IOV operator namespaces</label>}
       <Button onClick={() => void refresh()} isDisabled={busy || !types.length}>Load / refresh</Button>
       {busy && <Spinner size="md" aria-label="Loading resources" />}
     </div>
+    {view === 'networking' && <p className="resource-relationships__muted">Enable cluster-scoped types for nodes, NMState, GatewayClasses, egress assignments, and namespace selector evaluation. Click Load / refresh after changing scope. Network policy matches and configured references do not prove connectivity. Operator namespace defaults: openshift-ingress-operator and openshift-sriov-network-operator; enter another namespace above for custom installations.</p>}
     <details className="resource-relationships__types"><summary>Resource types ({enabled.length} selected)</summary>
       <p>Only selected types are loaded. Secrets are excluded; references to them are shown by name only.</p>
       <div className="resource-relationships__typegrid">{types.map(t => <label key={typeKey(t)}>
@@ -161,7 +190,7 @@ export default function RelationshipsPage() {
           activeItems={selected ? [selected] : []} onSelect={(_e, item) => setSelected(item)} />
         {!resources.length && !busy && <p>No resources loaded. Check your namespace, selected types, and API notices.</p>}
         {selectedUid && (graph.unresolved.get(selectedUid) || []).length > 0 && <div className="resource-relationships__unresolved">
-          <h3>References outside the loaded graph</h3><ul>{graph.unresolved.get(selectedUid)!.map((x, i) => <li key={i}>{x}</li>)}</ul>
+          <h3>Reference and rule details</h3><ul>{graph.unresolved.get(selectedUid)!.map((x, i) => <li key={i}>{x}</li>)}</ul>
         </div>}
       </section>
       {editors.length ? <aside className="resource-relationships__editors" aria-label="YAML editor workspace">

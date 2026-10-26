@@ -25,3 +25,12 @@ test('rejects duplicate keys, multiple documents, invalid YAML and status edits'
   assert.throws(() => parseEdit('data: [', original));
   assert.throws(() => parseEdit(editableYaml(original) + '\nstatus: {}', original), /server-managed/);
 });
+
+test('unfilled mapping placeholders cannot be validated/saved; explicit null and empty strings remain intentional', () => {
+  const text = editableYaml(original);
+  assert.throws(() => parseEdit(text + '\noptional: ', original), /Empty suggestion placeholders/);
+  assert.throws(() => parseEdit(text + '\noptional: # fill later', original), /Empty suggestion placeholders/);
+  assert.equal(parseEdit(text + '\noptional: null', original).optional, null);
+  assert.equal(parseEdit(text + '\noptional: ""', original).optional, '');
+  assert.equal(parseEdit(text + '\noptional: |\n', original).optional, '');
+});

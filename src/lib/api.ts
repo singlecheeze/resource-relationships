@@ -1,3 +1,4 @@
+import { networkTypes } from './networking';
 import { consoleFetch } from '@openshift-console/dynamic-plugin-sdk';
 import { collectionPath, LoadedResource, Resource, ResourceType, resourcePath, typeKey } from './model';
 
@@ -44,6 +45,7 @@ export async function discover(): Promise<{ types: ResourceType[]; warnings: str
   };
 }
 export const defaultTypes = new Set([
+  ...networkTypes,
   'pods.core', 'services.core', 'persistentvolumeclaims.core', 'configmaps.core', 'serviceaccounts.core',
   'deployments.apps', 'replicasets.apps', 'statefulsets.apps', 'daemonsets.apps', 'jobs.batch', 'cronjobs.batch',
   'endpointslices.discovery.k8s.io', 'routes.route.openshift.io', 'ingresses.networking.k8s.io',

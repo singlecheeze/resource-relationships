@@ -1,0 +1,70 @@
+import { ResourceType } from './model';
+import { SchemaBundle, resolveSchema } from './schema';
+
+// Group-qualified keys prevent an unrelated custom kind from receiving built-in help.
+const descriptions: Record<string, string> = {
+  '/Pod': 'Runs one or more containers together with shared networking and storage. Pods are usually created and replaced by a workload controller such as a Deployment or StatefulSet.',
+  '/Service': 'Provides a stable way to reach a set of network endpoints. A selector-based Service finds Pods by their labels; EndpointSlices describe its endpoints.',
+  '/Endpoints': 'Records addresses and ports backing a Service using the legacy Endpoints API. EndpointSlice is the newer, more scalable representation.',
+  '/ConfigMap': 'Stores non-confidential configuration as key/value data. Pods can consume it through environment variables or mounted files; applications may need a reload or restart to use changes.',
+  '/Secret': 'Stores sensitive configuration such as credentials or certificates. Access is controlled by Kubernetes permissions; base64 encoding is not encryption.',
+  '/ServiceAccount': 'Provides an identity for processes running in Pods. Role bindings determine what that identity can do through the Kubernetes API.',
+  '/Namespace': 'Groups namespaced resources and provides a scope for names, access policies, and quotas. OpenShift projects build on namespaces.',
+  '/Node': 'Represents a worker or control-plane machine registered with the cluster. Its status reports capacity, conditions, and addresses; Pods are scheduled onto nodes.',
+  '/PersistentVolumeClaim': 'Requests persistent storage for a workload. A claim can bind to a PersistentVolume, which Pods then use through a volume reference.',
+  '/PersistentVolume': 'Represents a piece of storage available to the cluster. It records storage connection details, capacity, access modes, and reclaim behavior, and can bind to a claim.',
+  'apps/Deployment': 'Manages replicas of a Pod template and rolls out changes through ReplicaSets. Edit the Deployment template to change the Pods it manages.',
+  'apps/ReplicaSet': 'Maintains a requested number of matching Pods. Deployments commonly create and manage ReplicaSets during rollouts.',
+  'apps/StatefulSet': 'Manages Pods with stable identities and persistent storage associations. It supports ordered rollout and scaling behavior for stateful applications.',
+  'apps/DaemonSet': 'Runs a copy of a Pod on each eligible node, commonly for node agents, networking, or logging.',
+  'batch/Job': 'Runs Pods to complete a finite task, tracking successful completions and retrying failures according to its configuration.',
+  'batch/CronJob': 'Creates Jobs on a schedule. Its configuration controls timing, overlapping runs, and retained Job history.',
+  'storage.k8s.io/StorageClass': 'Defines a class of storage and provisioning parameters. Claims can request a class to have storage provisioned by its driver.',
+  'discovery.k8s.io/EndpointSlice': 'Describes a group of network endpoints, including addresses, ports, and readiness conditions. A Service can have multiple EndpointSlices.',
+  'route.openshift.io/Route': 'Exposes a Service through an OpenShift ingress router using a hostname and optional path and TLS settings. Status reports router admission.',
+  'networking.k8s.io/Ingress': 'Declares HTTP/HTTPS routing rules from hosts and paths to backend Services. An ingress controller implements these rules.',
+  'networking.k8s.io/IngressClass': 'Identifies the controller and optional configuration associated with a class of Ingress resources.',
+  'networking.k8s.io/NetworkPolicy': 'Selects Pods and declares allowed ingress and egress traffic at the network layer. Its effect depends on direction, all applicable policies, and support from the network implementation.',
+  'gateway.networking.k8s.io/GatewayClass': 'Identifies a Gateway controller and shared configuration for Gateways of that class.',
+  'gateway.networking.k8s.io/Gateway': 'Defines traffic listeners and rules for attaching routes. Its controller provisions or configures the networking infrastructure; status reports readiness.',
+  'gateway.networking.k8s.io/HTTPRoute': 'Matches HTTP requests and directs them to backends, with optional filters and traffic splitting. Parent references request attachment to a Gateway or another supported parent.',
+  'gateway.networking.k8s.io/GRPCRoute': 'Matches gRPC traffic and directs it to backends through a supported Gateway API implementation.',
+  'gateway.networking.k8s.io/TCPRoute': 'Directs TCP connections to backends through a supported Gateway API implementation.',
+  'gateway.networking.k8s.io/TLSRoute': 'Routes TLS traffic, such as by server name, to backends through a supported Gateway API implementation.',
+  'gateway.networking.k8s.io/UDPRoute': 'Directs UDP traffic to backends through a supported Gateway API implementation.',
+  'gateway.networking.k8s.io/ReferenceGrant': 'Allows specified cross-namespace API references into the namespace containing the grant. It does not grant user permissions or by itself prove that traffic can flow.',
+  'policy.networking.k8s.io/AdminNetworkPolicy': 'Defines administrator-controlled network rules for selected subjects. Priority and rule actions influence how traffic is handled alongside other applicable policies.',
+  'policy.networking.k8s.io/BaselineAdminNetworkPolicy': 'Defines baseline administrative network rules for selected subjects, with behavior determined by the policy model and other applicable policies.',
+  'k8s.cni.cncf.io/NetworkAttachmentDefinition': 'Describes a network attachment using CNI configuration. Pods can request attachments through Multus annotations; a definition alone does not prove that an attachment succeeded.',
+  'k8s.ovn.org/UserDefinedNetwork': 'Defines a user-defined network within a namespace for the OVN-Kubernetes implementation. Its specification describes topology and network addressing.',
+  'k8s.ovn.org/ClusterUserDefinedNetwork': 'Defines an OVN-Kubernetes user-defined network across selected namespaces. Its selector determines where the network is made available.',
+  'k8s.ovn.org/EgressIP': 'Requests particular source IP addresses for outgoing traffic from selected Pods in selected namespaces. Status reports the nodes assigned to host those egress IPs.',
+  'k8s.ovn.org/EgressFirewall': 'Defines ordered rules controlling outgoing traffic from a namespace to configured destinations and ports.',
+  'k8s.ovn.org/EgressQoS': 'Configures quality-of-service marking for selected outgoing Pod traffic, using DSCP values and optional destination filters.',
+  'k8s.ovn.org/EgressService': 'Configures outgoing traffic behavior associated with a Service, including node selection where applicable. Status reports the selected host.',
+  'k8s.ovn.org/AdminPolicyBasedExternalRoute': 'Defines external next hops for outgoing traffic from selected namespaces. Next hops can be static addresses or dynamically selected gateway Pods.',
+  'nmstate.io/NodeNetworkConfigurationPolicy': 'Declares desired network configuration for selected nodes, such as interfaces, bonds, bridges, VLANs, and routes. Per-node enactments report application results.',
+  'nmstate.io/NodeNetworkConfigurationEnactment': 'Reports how a node network configuration policy is being applied to one node. Inspect its conditions and messages when diagnosing a policy rollout.',
+  'nmstate.io/NodeNetworkState': 'Reports observed network configuration on a node. Use a NodeNetworkConfigurationPolicy to request configuration changes.',
+  'operator.openshift.io/IngressController': 'Configures an OpenShift ingress controller, including its domain, placement, and route selection. The operator manages the router workload from this configuration.',
+  'sriovnetwork.openshift.io/SriovNetworkNodePolicy': 'Requests SR-IOV device configuration on selected nodes, including physical-function selection and virtual-function settings.',
+  'sriovnetwork.openshift.io/SriovNetworkNodeState': 'Reports SR-IOV network device information and configuration state for a node.',
+  'sriovnetwork.openshift.io/SriovNetwork': 'Defines an SR-IOV network and associated attachment settings. The operator generates a NetworkAttachmentDefinition for workloads to use.',
+  'config.openshift.io/Network': 'Describes cluster-wide network configuration, such as network type and address ranges. These settings affect cluster networking and can have update restrictions.',
+  'operator.openshift.io/Network': 'Configures the Cluster Network Operator and the networking components it manages.',
+  'config.openshift.io/DNS': 'Describes cluster-level DNS configuration used by OpenShift platform components.',
+  'operator.openshift.io/DNS': 'Configures the OpenShift DNS Operator and its managed DNS service, including supported forwarding settings.',
+  'kubevirt.io/VirtualMachine': 'Declares a virtual machine and its desired lifecycle configuration. A running instance is represented by a VirtualMachineInstance.',
+  'kubevirt.io/VirtualMachineInstance': 'Represents a running virtual machine instance, including its runtime specification and reported status.',
+  'cdi.kubevirt.io/DataVolume': 'Describes how to populate a persistent volume with virtual machine disk data, such as by import, upload, or cloning.',
+  'serving.kserve.io/InferenceService': 'Declares a model-serving workload. Its controller manages serving resources and reports endpoint and readiness information.',
+  'serving.kserve.io/LLMInferenceService': 'Declares an LLM-serving workload and associated serving configuration. Its controller reconciles the resources required to serve the model.',
+  'leaderworkerset.x-k8s.io/LeaderWorkerSet': 'Manages groups of Pods with a leader and workers, useful for distributed workloads that need coordinated group lifecycle and scaling.',
+};
+export function resourceHelp(type: ResourceType, schema?: SchemaBundle): { text: string; source: string } {
+  const text = descriptions[`${type.group}/${type.kind}`];
+  if (text) return { text, source: 'Resource overview' };
+  const description = schema && resolveSchema(schema.root, schema.document).description;
+  if (typeof description === 'string' && description.trim()) return { text: description, source: 'Description published by this API schema' };
+  return { text: `${type.kind} is a ${type.namespaced ? 'namespaced' : 'cluster-scoped'} API resource in ${type.group || 'the core API group'}. Its behavior is defined by the API implementation or operator that provides it. No kind-specific description is available from the loaded schema.`, source: 'API metadata' };
+}

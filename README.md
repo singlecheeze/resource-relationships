@@ -9,14 +9,65 @@ This is custom demo software, not a Red Hat supported product. The source, depen
 - Adds **Home → Resource Relationships** to the Administrator navigation, at `/resource-relationships`.
 - Loads one namespace at a time. Enter `ai-test`, `nemo`, or another namespace explicitly; this is independent of the console's global project selector.
 - Discovers API types and allows choosing additional custom resource types.
-- Groups inventory by kind. Expand a kind, then use a resource's right-click or ⋮ menu.
+- **All resources** groups inventory by kind. **Networking** groups by project or cluster scope, then purpose, then kind. Expand a kind, then use a resource's right-click or ⋮ menu.
 - **Focus relationships** builds a tree from that object. Switch between outgoing and incoming relationships, and choose depth 1–4. Hover a relationship to see the field that establishes it.
 - **Tabbed editors:** each resource opens in its own PatternFly tab, labeled by kind/namespace/name. Reopening the same UID selects the existing tab. A `*` marks unsaved changes. Each tab retains its YAML, validation result, permissions, and save/conflict state while inactive. The tab strip scrolls when it overflows. Tabs remain open even when the tree is refreshed or another namespace is loaded. Tabs are in-memory only; browser refresh closes them.
-- **Open YAML** fetches the current object and opens a plain-text YAML editor tab on the right. Use the same menu with a keyboard, or Shift+F10 while focused on a resource label.
+- **Open YAML** fetches the current object and opens the console SDK’s Monaco-based `CodeEditor` in a tab on the right. Use the same menu with a keyboard, or Shift+F10 while focused on a resource label.
 - Checks update permission with `SelfSubjectAccessReview`. Users without permission get a read-only editor.
 - Requires a successful server dry-run validation of the exact text before enabling Save. Save also requires an in-app confirmation.
 - Retains resource UID and resourceVersion; stale updates return conflicts and preserve your text.
 - Saves through the console's Kubernetes API proxy, with your logged-in permissions. There is no privileged backend or etcd connection.
+
+## Resource descriptions and editor help (v0.5.0)
+
+Each YAML tab now includes **About KIND**, a PatternFly expandable section with a chevron, directly above the editor. Expand it to see a plain-language overview, API version, and scope. The section remembers its expanded state independently in each mounted tab.
+
+Built-in overviews cover the default workload, storage, networking, egress, node, AI-serving, and virtualization kinds. Lookups use API group plus kind so a same-named custom kind does not get an unrelated explanation. Other kinds use a root description from their OpenAPI/CRD schema when available; otherwise the UI explicitly provides only generic API metadata. Schema descriptions are rendered as text, not HTML.
+
+A **circled question-mark button** next to the YAML heading has a hover/focus tooltip and opens a PatternFly help popover on click or keyboard activation. It contains the edit → validate → save workflow, schema shortcuts, suggestion preview behavior, empty-value rules, independent tabs, reload/conflict handling, permissions, and draft-loss reminders. The popover has a close button and scrolls on smaller screens. The native console editor's View Shortcuts control remains available.
+
+## Networking view
+
+Select **View → Networking**, enter your application namespace, enable **Include selected cluster-scoped types**, and click **Load / refresh**. Namespaces are needed to evaluate namespace selectors; access failures remain visible and do not grant extra permissions. Optional APIs appear only if discovered.
+
+| Group | Resources and relationship coverage |
+|---|---|
+| Application access | Route/Ingress → Service; Gateway ↔ route parent reference; HTTP/GRPC/TCP/TLS/UDP route → backend; Gateway → GatewayClass; Ingress → IngressClass. ReferenceGrants are listed for YAML inspection. Configured references are not a claim of acceptance or cross-namespace authorization. |
+| Services & endpoints | Service selectors and EndpointSlices; slice endpoint UID, addresses/readiness, or unresolved external endpoint details. Legacy Endpoints are available for inspection/ownership only. |
+| Network policies | NetworkPolicy subject Pods and ingress/egress peer selector matches, CIDR details; AdminNetworkPolicy/BaselineAdminNetworkPolicy subject matching. This is not a network policy simulator. Inspect ordered administrative rules/actions in YAML. |
+| Secondary & user-defined networks | NADs; Pod Multus requested vs reported attachments, including cross-project names; UserDefinedNetwork/ClusterUserDefinedNetwork inventory, owner references and cluster network namespace selection. |
+| Egress | EgressIP selected Pods and observed node assignments; EgressFirewall namespace Pods and rule destination details; EgressQoS selectors; EgressService Service, eligible nodes and assigned host; AdminPolicyBasedExternalRoute source namespaces and dynamic/static next hops. |
+| Infrastructure | Nodes, namespaces, ingress controllers, GatewayClasses/IngressClasses, NMState policies/enactments/state, SR-IOV policies/state/networks; cluster Network and DNS configuration objects are available for YAML inspection and generic ownership. |
+
+Node policies connect to nodes by selector. NMState enactments connect using `nmstate.io/node` and `nmstate.io/policy` labels; observed state resources use their documented node-name identity. Interface/bond/VLAN data remain inside NodeNetworkState/NNCP YAML, not fake Kubernetes objects. No relationship is inferred solely from a similar resource name unless that identity is part of the API contract.
+
+The networking view can additionally load ingress controller and SR-IOV configuration from `openshift-ingress-operator` and `openshift-sriov-network-operator`. This checkbox affects the next refresh. For operator installations in another namespace, enter that namespace explicitly. Other cross-namespace targets remain unresolved until their namespace is loaded; the current version does not recursively fetch all referenced projects. Use the inventory search, then **Focus relationships** for incoming/outgoing connections. Expand relationship groups; right-click actual objects to open independent YAML tabs.
+
+Reference/rule details include non-object CIDRs and external IPs as text. Policy selection, desired configuration, and reported assignments are labeled separately. The plugin does not test packet paths, compute the combined effect of policies, validate ReferenceGrants, or infer CNI configuration from JSON embedded in a NAD. Unknown/unloaded targets are not automatically broken references.
+
+## Expandable configuration examples (v0.5.0)
+
+Each YAML tab has a right-hand **Configuration examples** panel with 3–5 curated use cases for supported kinds. Expand a title to mount a read-only instance of the same console CodeEditor used by the editable draft. On narrow editor workspaces, examples stack below the editor. They inherit console typography and semantic theme colors.
+
+NMState includes five NodeNetworkConfigurationPolicy manifests: VLAN 100, MTU 9000, an active-backup bond, a Linux bridge, and a static route. The catalog also covers workload, storage, application access, policy, egress, node infrastructure, virtualization, and AI-serving resources. See [EXAMPLES.md](EXAMPLES.md) for the complete inventory.
+
+Each example identifies its target kind/API, describes prerequisites, and links to documentation. Most examples are explicitly labeled configuration fragments rather than complete manifests. Replace illustrative names, interfaces, addresses, and values, preserve unrelated fields, and validate against your installed API before saving. The catalog is bundled and does not fetch remote YAML.
+
+Observed resources such as NodeNetworkState show examples for their configuration resource, with an explanation. Unknown custom API kinds show an unavailable notice instead of invented fields. Examples do not insert into drafts, trigger validation, or save to the cluster; users can select and copy text explicitly. Live-cluster admission of example configurations has not been tested.
+
+## Native editor, themes, and schema suggestions
+
+Production uses **`CodeEditor` exported by `@openshift-console/dynamic-plugin-sdk`**, supplied by the running console: the same Monaco-based editing component family used by the console. The surrounding tab workspace and explicit dry-run/save workflow are plugin-specific. No second Monaco bundle, theme, or language worker is installed. The plain textarea in `preview/sdk.ts` is a **test substitute only** and is not part of the production plugin.
+
+Plugin styles use PatternFly semantic tokens for colors, headings, and focus states, and inherit the console font. They do not import a global PatternFly stylesheet, override host `.pf-*`/`.co-*` selectors, define their own theme, or load fonts. The standalone preview alone loads PatternFly CSS. Native inputs inherit typography and semantic colors. The SDK editor manages its own code typography/theme. Runtime light/dark and theme-switch verification on OpenShift is still required; static checks do not prove browser rendering.
+
+Each editor requests the exact group/version/kind schema from the cluster OpenAPI v3 endpoint, falling back to the CRD's versioned `openAPIV3Schema`. Requests use your console session. No external schema service is contacted. If access fails or no schema is published, an inline notice appears and server validation still works.
+
+- **Ctrl+Space** offers fields at the cursor's YAML position, with descriptions, types, required/optional markers, allowed values, and documented defaults. Enum/boolean values are offered after `key:`. Defaults are described, not silently inserted.
+- Monaco suggestion preview is enabled: selecting a suggestion can show faded preview text. That preview is not part of the document and cannot be sent to the server. **Tab/Enter accepts** a suggestion; **Escape dismisses** it. Accepted keys have an editable value placeholder. Fill them before validating. Empty mapping placeholders are blocked locally; remove an unused field or explicitly enter `null` if intentional.
+- This is cursor-based completion, **not an always-visible overlay of every possible field**. Accepting a suggestion does change your draft. Empty accepted values are blocked until filled, removed, or explicitly set to `null`; server validation remains authoritative.
+- Providers are scoped to the individual editor model and disposed on close. They do not replace global Monaco YAML settings or affect another console editor.
+- Basic mappings, arrays, local `$ref`, `allOf`, and additionalProperties schema traversal are supported. Arbitrary map key names, free-form preserved fields, complex YAML keys/flow syntax, external schema references, conditional `oneOf`/`anyOf` alternatives, and CEL/cross-field validation are not inferred. The server performs authoritative validation.
 
 ## Relationship coverage
 
@@ -46,7 +97,7 @@ Prerequisites: OpenShift 4.22, `oc`, Python 3, cluster-admin access for installi
 Extract this archive and enter its directory:
 
 ```bash
-unzip resource-relationships-v0.2.0.zip
+unzip resource-relationships-v0.5.0.zip
 cd resource-relationships
 oc login https://api.YOUR-CLUSTER:6443
 
@@ -61,7 +112,7 @@ oc start-build resource-relationships -n resource-relationships \
   --from-dir="$build_context" --follow --wait
 rm -rf "$build_context"
 
-export IMAGE=image-registry.openshift-image-registry.svc:5000/resource-relationships/resource-relationships:v0.2.0
+export IMAGE=image-registry.openshift-image-registry.svc:5000/resource-relationships/resource-relationships:v0.5.0
 bash scripts/deploy.sh
 ```
 
@@ -82,7 +133,7 @@ If the build fails, inspect `oc logs -n resource-relationships build/BUILD-NAME`
 This performs the full source build in a container. It needs network access to npm and the UBI registries.
 
 ```bash
-export IMAGE=quay.io/YOUR-ORGANIZATION/resource-relationships:v0.2.0
+export IMAGE=quay.io/YOUR-ORGANIZATION/resource-relationships:v0.5.0
 podman build --platform linux/amd64 -t "$IMAGE" .
 podman push "$IMAGE"
 bash scripts/deploy.sh
@@ -120,7 +171,7 @@ The editor uses HTTP PUT (replace), not server-side apply. Removing fields from 
 
 Dry-run is sent with `dryRun=All` and `fieldValidation=Strict`. Validation may fail for immutable fields, unavailable admission webhooks, unknown fields, or missing permission. A successful dry-run does not guarantee a later save: permissions or server state can change between the requests.
 
-A 409 conflict leaves your edits in the textarea. Copy them somewhere safe, click **Reload YAML**, and reapply to the new version. There is deliberately no force-save or automatic merge. Successful saves update that object in the local graph; refresh to reload all other objects changed by controllers.
+A 409 conflict leaves your edits in the editor. Copy them somewhere safe, click **Reload YAML**, and reapply to the new version. There is deliberately no force-save or automatic merge. Successful saves update that object in the local graph; refresh to reload all other objects changed by controllers.
 
 Switching tabs and refreshing the graph preserve all editor drafts. Closing a dirty tab or reloading its YAML prompts before discarding that draft. Tabs with requests in progress cannot be closed. Browser unload protection is also installed. **Other console SPA navigation is not intercepted**; save or copy your edits before changing console pages. Drafts are not persisted to browser storage.
 
@@ -130,7 +181,10 @@ Switching tabs and refreshing the graph preserve all editor drafts. Closing a di
 - `src/components/YamlPane.tsx`: fetch, permission check, edit, dry-run, save.
 - `src/lib/graph.ts`: explicit relationship rules, UID ownership, cycle/depth limits.
 - `src/lib/api.ts`: preferred-version discovery, scoped list requests, console fetch wrapper.
-- `src/lib/editor.ts`: YAML parser and identity/version guards.
+- `src/lib/editor.ts`: YAML parser, unfilled-value protection, and identity/version guards.
+- `src/lib/networking.ts`: networking inventory groups and explicit relationship resolvers.
+- `src/components/ConsoleYamlEditor.tsx`: host editor and model-scoped completion provider.
+- `src/lib/schema.ts` / `schema-api.ts`: YAML context and versioned OpenAPI/CRD schema retrieval.
 - `deploy/plugin-template.yaml`: service account, HTTPS nginx, Deployment, Service, ConsolePlugin.
 - `deploy/build.yaml`: optional binary BuildConfig and ImageStream.
 - `scripts/plugin-state.py`: concurrency-safe console enable/disable.
@@ -184,12 +238,12 @@ npm run test:ui
 ## Limits and scope
 
 - Snapshot loading, not live watch; click refresh to see controller updates.
-- One namespace at a time, with optional selected cluster-scoped resources.
+- One application namespace at a time, with optional selected cluster-scoped resources and ingress/SR-IOV operator namespace reads.
 - Maximum 2,000 objects per type with a warning when truncated; lists are paginated in 500-item chunks. API discovery/list concurrency is limited to five requests.
 - Inventory renders at most 150 filtered objects; search narrows it. A focused tree is capped at 200 nodes and 1–4 levels. These limits are displayed in the UI.
 - No inference from similarly named resources or arbitrary labels. Shared application labels alone are not proof of a dependency.
 - Only discovered preferred API versions are offered. Custom APIs that cannot be discovered/listed are reported or absent.
-- Plain-text YAML editor, without syntax highlighting or a diff viewer.
+- Uses the host console CodeEditor with YAML highlighting and scoped schema suggestions. No diff viewer.
 - UI strings are English. Theme colors follow PatternFly tokens.
 - OpenShift 4.22 compatibility is declared as `>=4.22.0-0 <4.23.0-0`. Rebuild and test against the matching console template/SDK before widening it. Installing a plugin is not a guarantee of compatibility after a console upgrade.
 
@@ -239,6 +293,6 @@ Use unique image tags for updates, rebuild, and run the deploy script with the n
 
 Based on the Apache-2.0 OpenShift console plugin template; its LICENSE is retained.
 
-## Upgrade from v0.1.0
+## Upgrade from v0.1.0, v0.2.0, or v0.3.0
 
-Rebuild the image from this package and deploy it with the new `v0.2.0` tag. For the in-cluster workflow, reapply `deploy/build.yaml` (its output tag is now v0.2.0), submit the new `dist/` and `Dockerfile.prebuilt`, and run `scripts/deploy.sh` with IMAGE ending in `:v0.2.0`. The ConsolePlugin name and route are unchanged. Save any open drafts before refreshing the console to load the new plugin.
+Rebuild the image from this package and deploy it with the new `v0.5.0` tag. For the in-cluster workflow, reapply `deploy/build.yaml` (its output tag is now v0.5.0), submit the new `dist/` and `Dockerfile.prebuilt`, and run `scripts/deploy.sh` with IMAGE ending in `:v0.5.0`. The ConsolePlugin name and route are unchanged. Save any open drafts before refreshing the console to load the new plugin.
