@@ -46,7 +46,19 @@ export function EditorHelp() {
       <p><strong>Reload YAML</strong> replaces your draft after confirmation. Conflicts preserve your edits; copy them, reload the latest object, and reapply. Refreshing the tree preserves tabs, but leaving this page or refreshing the browser can lose drafts.</p>
       <p>Edits use your permissions. Read-only resources cannot be saved. Status and managed fields are excluded; saving replaces editable fields, so removing a field may clear it.</p>
     </div>}>
-    <Tooltip content="YAML editor help and keyboard shortcuts">
+    <Tooltip maxWidth="34rem" content={<div className="resource-relationships__shortcut-tip">
+      <strong>YAML keyboard shortcuts</strong>
+      <dl>
+        <dt>Ctrl + Space</dt><dd>Show available schema suggestions.</dd>
+        <dt>↑ / ↓</dt><dd>Select a suggestion.</dd>
+        <dt>Tab / Enter</dt><dd>Accept the selected suggestion.</dd>
+        <dt>Esc</dt><dd>Dismiss suggestion previews.</dd>
+        <dt>Ctrl / Cmd + F</dt><dd>Find text in this editor.</dd>
+        <dt>Ctrl / Cmd + Z</dt><dd>Undo the last edit.</dd>
+        <dt>Ctrl / Cmd + S</dt><dd>Save after server validation; confirmation is required.</dd>
+      </dl>
+      <span>Click the question mark for full editing and save instructions.</span>
+    </div>}>
       <Button variant="plain" aria-label="YAML editor help and keyboard shortcuts" className="resource-relationships__help-button"
         icon={<QuestionCircleIcon aria-hidden="true" />} />
     </Tooltip>

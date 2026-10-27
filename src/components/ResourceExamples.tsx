@@ -13,8 +13,8 @@ function ExampleSection({ example }: { example: ResourceExample }) {
       {expanded && <>
         <p className="resource-relationships__muted">{example.kind} · {example.apiVersion} · {example.format === 'manifest' ? 'Example manifest' : 'Configuration fragment'} · Read-only</p>
         <p>{example.note}</p>
-        <CodeEditor value={example.yaml} language="yaml" minHeight="16rem" height="22rem" showShortcuts={false}
-          options={{ readOnly: true, domReadOnly: true, automaticLayout: true, ariaLabel: `Example YAML: ${example.title}`,
+        <CodeEditor value={example.yaml} language="yaml" height="352px" isFullHeight={false} showShortcuts={false}
+          options={{ readOnly: true, domReadOnly: true, automaticLayout: true, glyphMargin: false, lineNumbersMinChars: 3, lineDecorationsWidth: 8, ariaLabel: `Example YAML: ${example.title}`,
             tabSize: 2, insertSpaces: true, minimap: { enabled: false }, wordWrap: 'on', scrollBeyondLastLine: false }}
           onSave={() => undefined} />
         <p><a href={example.source} target="_blank" rel="noopener noreferrer">Configuration reference (opens a new tab)</a></p>

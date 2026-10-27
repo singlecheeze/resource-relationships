@@ -71,7 +71,7 @@ export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
     <div className="resource-relationships__row">
       <h2>YAML · {resource.object.kind}/{resource.object.metadata.name}</h2>
       <EditorHelp />
-      <Button variant="plain" onClick={onClose} isDisabled={busy} aria-label="Close YAML editor">Close</Button>
+      <Button size="sm" variant="plain" onClick={onClose} isDisabled={busy} aria-label="Close YAML editor">Close</Button>
     </div>
     <p>{resource.object.metadata.namespace || 'Cluster scoped'} · {allowed ? 'Editable' : 'Read-only'}{dirty ? ' · Unsaved changes' : ''}</p>
     <ResourceAbout resource={current || resource} schema={schema} />
@@ -85,9 +85,9 @@ export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
       onChange={next => { setText(next); setReviewed(null); }}
       onSave={() => { if (allowed && !busy && dirty && reviewed === text) void save(false); }} />
     <div className="resource-relationships__row">
-      <Button variant="secondary" isDisabled={!current || !allowed || busy || !dirty} onClick={() => void save(true)}>Validate on server</Button>
-      <Button variant="primary" isDisabled={!allowed || busy || !dirty || reviewed !== text} onClick={() => void save(false)}>Save changes</Button>
-      <Button variant="link" isDisabled={busy} onClick={() => { if (!dirty || window.confirm('Discard unsaved YAML and reload from the server?')) void load(); }}>Reload YAML</Button>
+      <Button size="sm" variant="secondary" isDisabled={!current || !allowed || busy || !dirty} onClick={() => void save(true)}>Validate on server</Button>
+      <Button size="sm" variant="primary" isDisabled={!allowed || busy || !dirty || reviewed !== text} onClick={() => void save(false)}>Save changes</Button>
+      <Button size="sm" variant="link" isDisabled={busy} onClick={() => { if (!dirty || window.confirm('Discard unsaved YAML and reload from the server?')) void load(); }}>Reload YAML</Button>
     </div>
     </div>
     <ResourceExamples type={resource.type} />

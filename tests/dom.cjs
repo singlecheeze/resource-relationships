@@ -6,6 +6,7 @@ const { getByRole, getAllByRole, queryByRole, getByText, fireEvent, waitFor } = 
 async function scenario(allowed) {
   let saves = 0, dryRuns = 0, conflict = false;
   const savedPaths = [];
+  const listPaths = [];
   const errors = [];
   const vc = new VirtualConsole();
   vc.on('jsdomError', e => { if (!e.message.includes('CSS')) errors.push(e); });
@@ -18,6 +19,7 @@ async function scenario(allowed) {
       w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
       w.fetch = async (url, opts = {}) => {
         const u = new URL(url, 'http://localhost'), p = u.pathname.replace('/api/kubernetes', '');
+        if (!opts.method && p.endsWith('/configmaps')) listPaths.push(p);
         const object = { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'settings', namespace: 'default', uid: 'config-uid', resourceVersion: '7' }, data: { greeting: 'hello' } };
         let data = {}, status = 200;
         if (p === '/openapi/v3') data = { paths: { 'api/v1': { serverRelativeURL: '/openapi/v3/api/v1' } } };
@@ -49,7 +51,10 @@ async function scenario(allowed) {
   await wait(() => assert.equal(button('Load / refresh').disabled, false));
   fireEvent.click(button('Load / refresh'));
   await wait(() => getByText(doc.body,/pods forbidden/));
-  fireEvent.click(getByText(doc.body,'ConfigMap',{exact:true}));
+  assert.equal(getByText(doc.body,'ConfigMap',{exact:true}).closest('li').getAttribute('aria-expanded'), 'false');
+  getByRole(doc.body, 'combobox', { name: 'Project' });
+  assert.equal(getByRole(doc.body, 'list', { name: 'Resource types', hidden: true }).children.length, 3);
+  fireEvent.click(getByText(doc.body, 'ConfigMap', { exact: true }).closest('li').querySelector('button'));
   await wait(() => getByText(doc.body,'ConfigMap: settings',{exact:true}));
   fireEvent.contextMenu(getByText(doc.body,'ConfigMap: settings',{exact:true}),{clientX:100,clientY:100});
   fireEvent.click(await wait(() => getByRole(doc.body,'menuitem',{name:'Open YAML'})));
@@ -57,10 +62,21 @@ async function scenario(allowed) {
     const el = getByRole(doc.body,'textbox',{name:'Resource YAML',exact:true});
     assert.ok(el.value.includes('greeting: hello')); return el;
   });
+  assert.equal(yaml.dataset.editorFullHeight, 'false');
+  assert.equal(yaml.dataset.editorHeight, 'clamp(320px, 52vh, 800px)');
+  assert.ok(!queryByRole(doc.body, 'checkbox', { name: 'Compact View' }));
+  fireEvent.click(button('Collapse all'));
+  await wait(() => assert.equal(getByText(doc.body, 'ConfigMap', { exact: true }).closest('li').getAttribute('aria-expanded'), 'true'));
+  assert.equal(getByText(doc.body, 'Service', { exact: true }).closest('li').getAttribute('aria-expanded'), 'false');
+  assert.ok(getByRole(doc.body, 'textbox', { name: 'Resource YAML', exact: true }) === yaml);
+  fireEvent.click(button('Expand all'));
+  await wait(() => assert.equal(getByText(doc.body, 'Service', { exact: true }).closest('li').getAttribute('aria-expanded'), 'true'));
   const originalDraft = yaml.value;
   fireEvent.click(button('Store application settings'));
   const example = await wait(() => getByRole(doc.body, 'textbox', { name: 'Example YAML: Store application settings', exact: true }));
   assert.equal(example.readOnly, true);
+  assert.equal(example.dataset.editorFullHeight, 'false');
+  assert.equal(example.dataset.editorHeight, '352px');
   assert.ok(example.value.includes('LOG_LEVEL: info'));
   assert.equal(yaml.value, originalDraft);
   assert.equal(saves, 0); assert.equal(dryRuns, 0);
@@ -74,7 +90,13 @@ async function scenario(allowed) {
   fireEvent.click(about);
   await wait(() => assert.equal(about.getAttribute('aria-expanded'), 'true'));
   getByText(doc.body, /Stores non-confidential configuration/);
-  fireEvent.click(button('YAML editor help and keyboard shortcuts'));
+  const helpButton = button('YAML editor help and keyboard shortcuts');
+  fireEvent.mouseEnter(helpButton);
+  const shortcutTooltip = await wait(() => getByRole(doc.body, 'tooltip'));
+  getByText(shortcutTooltip, 'Show available schema suggestions.');
+  getByText(shortcutTooltip, 'Save after server validation; confirmation is required.');
+  fireEvent.mouseLeave(helpButton);
+  fireEvent.click(helpButton);
   await wait(() => getByText(doc.body, 'Keyboard shortcuts', { exact: true }));
   getByText(doc.body, /Request a save only after the exact draft/);
   fireEvent.click(button('Close YAML editor help'));
@@ -149,9 +171,13 @@ async function scenario(allowed) {
   await wait(() => getByText(doc.body, 'Project: default', { exact: true }));
   for (const name of ['Project: default', 'Services & endpoints', 'Service']) {
     const label = await wait(() => getByText(doc.body, name, { exact: true }));
-    fireEvent.click(label);
+    fireEvent.click(label.closest('li').querySelector('button'));
   }
   await wait(() => getByText(doc.body, 'Service: demo-service', { exact: true }));
+  fireEvent.change(getByRole(doc.body, 'combobox', { name: 'Project' }), { target: { value: '#ALL_NS#' } });
+  fireEvent.click(button('Load / refresh'));
+  await wait(() => getByText(doc.body, /Snapshot: All projects/));
+  assert.ok(listPaths.includes('/api/v1/configmaps'));
   assert.deepEqual(errors, []);
   dom.window.close();
 }

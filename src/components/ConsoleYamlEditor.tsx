@@ -31,8 +31,11 @@ export function ConsoleYamlEditor({ value, readOnly, schema, onChange, onSave }:
     });
     return () => provider.dispose();
   }, [instance, schema, readOnly]);
-  return <CodeEditor ref={capture} value={value} language="yaml" minHeight="52vh" showShortcuts
-    options={{ readOnly, automaticLayout: true, ariaLabel: 'Resource YAML', tabSize: 2, insertSpaces: true,
+  // The host defaults to isFullHeight=true. In this auto-height grid that can
+  // collapse Monaco even while minHeight makes its outer shell look tall.
+  return <CodeEditor ref={capture} value={value} language="yaml"
+    height="clamp(320px, 52vh, 800px)" isFullHeight={false} showShortcuts
+    options={{ readOnly, automaticLayout: true, glyphMargin: false, lineNumbersMinChars: 3, lineDecorationsWidth: 8, ariaLabel: 'Resource YAML', tabSize: 2, insertSpaces: true,
       quickSuggestions: { other: true, comments: false, strings: false }, suggest: { preview: true }, wordBasedSuggestions: 'off' }}
     onEditorDidMount={(editor: any, monaco: any) => capture({ editor, monaco })}
     onChange={(next: string) => onChange(next)} onSave={onSave} />;

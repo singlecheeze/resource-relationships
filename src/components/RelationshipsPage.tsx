@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { NamespaceBar, useActiveNamespace, isAllNamespacesKey } from '@openshift-console/dynamic-plugin-sdk';
 import { Alert, Button, Spinner, TreeView, Tabs, Tab, TabTitleText } from '@patternfly/react-core';
 import type { TreeViewDataItem } from '@patternfly/react-core';
 import { defaultTypes, discover, errorText, loadResources } from '../lib/api';
@@ -6,15 +7,20 @@ import { buildGraph, walkGraph, WalkNode } from '../lib/graph';
 import { LoadedResource, ResourceType, typeKey } from '../lib/model';
 import { YamlPane } from './YamlPane';
 import { networkGroup, networkGroups, networkTypes } from '../lib/networking';
+import { bulkTreeExpansion, ResourceTreeItem } from '../lib/tree-expansion';
+import { treeIcon } from './TreeIcons';
 import './relationships.css';
 
 type Menu = { uid: string; x: number; y: number };
 export default function RelationshipsPage() {
+  const [treeCommand, setTreeCommand] = React.useState<{ mode: 'all' | 'open'; revision: number }>();
   const [view, setView] = React.useState('all');
   const [infra, setInfra] = React.useState(true);
   const [types, setTypes] = React.useState<ResourceType[]>([]);
   const [enabled, setEnabled] = React.useState<string[]>([]);
-  const [namespace, setNamespace] = React.useState('default');
+  const [namespace] = useActiveNamespace();
+  const allProjects = isAllNamespacesKey(namespace);
+  const requestNamespace = allProjects ? '' : namespace;
   const [loadedScope, setLoadedScope] = React.useState('');
   const [cluster, setCluster] = React.useState(false);
   const [resources, setResources] = React.useState<LoadedResource[]>([]);
@@ -79,15 +85,15 @@ export default function RelationshipsPage() {
   };
   const showMenu = (uid: string, x: number, y: number) => setMenu({ uid, x: Math.max(8, Math.min(x, window.innerWidth - 220)), y: Math.max(8, Math.min(y, window.innerHeight - 140)) });
   async function refresh() {
-    if (!namespace.trim()) { setWarnings(['Enter a namespace. This version intentionally loads one namespace at a time.']); return; }
+    if (!namespace) { setWarnings(['Select a project before loading resources.']); return; }
     setMenu(undefined);
     controller.current?.abort(); controller.current = new AbortController();
     const id = ++generation.current;
     setBusy(true); setWarnings([]);
     try {
-      const result = await loadResources(types.filter(t => enabled.includes(typeKey(t)) && (t.namespaced || cluster)), namespace.trim(), controller.current.signal);
+      const result = await loadResources(types.filter(t => enabled.includes(typeKey(t)) && (t.namespaced || cluster)), requestNamespace, controller.current.signal);
       if (id !== generation.current) return;
-      if (infra && view === 'networking') {
+      if (infra && view === 'networking' && !allProjects) {
         // Operator configuration lives outside the application project. Load only the relevant types there.
         for (const operatorNamespace of ['openshift-ingress-operator', 'openshift-sriov-network-operator']) {
           if (operatorNamespace === namespace.trim()) continue;
@@ -97,17 +103,18 @@ export default function RelationshipsPage() {
           result.resources.push(...extras.resources); result.warnings.push(...extras.warnings.map(w => `${operatorNamespace}: ${w}`));
         }
       }
-      setResources(result.resources); setWarnings(result.warnings); setLoadedScope(namespace.trim()); setRoot(''); setSelected(undefined);
+      setResources(result.resources); setWarnings(result.warnings); setLoadedScope(allProjects ? 'All projects' : namespace); setRoot(''); setSelected(undefined);
+      setTreeCommand(old => ({ mode: 'open', revision: (old?.revision || 0) + 1 }));
     } catch (e) { if (id === generation.current) setWarnings([errorText(e)]); }
     finally { if (id === generation.current) setBusy(false); }
   }
   const label = (r: LoadedResource) => `${r.object.kind}: ${r.object.metadata.name}${r.object.metadata.namespace && r.object.metadata.namespace !== loadedScope ? ` (${r.object.metadata.namespace})` : ''}`;
-  const renderNode = (n: WalkNode, path: string): TreeViewDataItem => {
+  const renderNode = (n: WalkNode, path: string): ResourceTreeItem => {
     const r = graph.nodes.get(n.uid)!;
     const id = `${path}/${n.uid}`;
     return {
-      id,
-      defaultExpanded: !n.edge,
+      id, resourceUid: n.uid, icon: n.children.length ? treeIcon(r.object.kind) : undefined,
+      defaultExpanded: false,
       name: <span className="resource-relationships__node" data-resource-uid={n.uid}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); showMenu(n.uid, e.clientX, e.clientY); }}
         onKeyDown={e => {
@@ -122,7 +129,7 @@ export default function RelationshipsPage() {
         e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); showMenu(n.uid, rect.left, rect.bottom);
       }}>⋮</button>,
       children: n.children.length ? [...new Set(n.children.map(child => child.edge?.relation || 'Related'))].map(relation => ({
-        id: `${id}/group/${relation}`, name: relation, defaultExpanded: true,
+        id: `${id}/group/${relation}`, name: relation, icon: treeIcon(relation), defaultExpanded: false,
         children: n.children.filter(child => (child.edge?.relation || 'Related') === relation).map((child, i) => renderNode(child, `${id}/${relation}/${i}`)),
       })) : undefined,
     };
@@ -131,40 +138,43 @@ export default function RelationshipsPage() {
     .sort((a, b) => label(a).localeCompare(label(b)));
   const visible = matches.slice(0, 150);
   const focused = root && graph.nodes.has(root) ? graph.nodes.get(root) : undefined;
-  const kindTree = (items: LoadedResource[], prefix: string): TreeViewDataItem[] => [...new Set(items.map(r => typeKey(r.type)))].map(key => ({
-    id: `${prefix}/kind-${key}`, name: items.find(r => typeKey(r.type) === key)!.object.kind, defaultExpanded: true,
+  const kindTree = (items: LoadedResource[], prefix: string): ResourceTreeItem[] => [...new Set(items.map(r => typeKey(r.type)))].map(key => ({
+    id: `${prefix}/kind-${key}`, name: items.find(r => typeKey(r.type) === key)!.object.kind, icon: treeIcon(items.find(r => typeKey(r.type) === key)!.object.kind), defaultExpanded: false,
     children: items.filter(r => typeKey(r.type) === key).map(r => renderNode({ uid: r.object.metadata.uid, cycle: false, children: [] }, `${prefix}/${key}`)),
   }));
-  const tree: TreeViewDataItem[] = focused ? [renderNode(walkGraph(graph, root, direction, depth), 'focus')]
+  const tree: ResourceTreeItem[] = focused ? [renderNode(walkGraph(graph, root, direction, depth), 'focus')]
     : view === 'all' ? kindTree(visible, 'inventory')
     : [...new Set(visible.map(r => r.type.namespaced ? `Project: ${r.object.metadata.namespace}` : 'Cluster networking'))].map(scope => ({
-      id: scope, name: scope, defaultExpanded: true,
+      id: scope, name: scope, icon: treeIcon(scope), defaultExpanded: false,
       children: Object.keys(networkGroups).flatMap(group => {
         const items = visible.filter(r => networkGroup(r) === group && (r.type.namespaced ? `Project: ${r.object.metadata.namespace}` : 'Cluster networking') === scope);
-        return items.length ? [{ id: `${scope}/${group}`, name: group, defaultExpanded: true, children: kindTree(items, `${scope}/${group}`) }] : [];
+        return items.length ? [{ id: `${scope}/${group}`, name: group, icon: treeIcon(group), defaultExpanded: false, children: kindTree(items, `${scope}/${group}`) }] : [];
       }),
     }));
+  const displayedTree = treeCommand ? bulkTreeExpansion(tree, treeCommand.mode, new Set(editors.map(r => r.object.metadata.uid))) : tree;
+  const expandTree = (mode: 'all' | 'open') => setTreeCommand(old => ({ mode, revision: (old?.revision || 0) + 1 }));
   const selectedUid = selected?.id?.split('/').at(-1);
   return <main className="resource-relationships__page">
     <h1>Resource Relationships</h1>
     <p>Explore ownership and references. Right-click a resource, or use its ⋮ menu, to open YAML or follow its relationships.</p>
+    <NamespaceBar />
     <div className="resource-relationships__toolbar">
-      <label>View <select aria-label="Explorer view" value={view} onChange={e => { setView(e.target.value); setRoot(''); setSelected(undefined); }}>
+      <label>View <select aria-label="Explorer view" value={view} onChange={e => { setView(e.target.value); setTreeCommand(undefined); setRoot(''); setSelected(undefined); }}>
         <option value="all">All resources</option><option value="networking">Networking</option>
       </select></label>
-      <label>Namespace <input aria-label="Namespace" value={namespace} onChange={e => setNamespace(e.target.value)} /></label>
+
       <label><input type="checkbox" checked={cluster} onChange={e => setCluster(e.target.checked)} /> Include selected cluster-scoped types</label>
       {view === 'networking' && <label><input type="checkbox" checked={infra} onChange={e => setInfra(e.target.checked)} /> Include ingress / SR-IOV operator namespaces</label>}
-      <Button onClick={() => void refresh()} isDisabled={busy || !types.length}>Load / refresh</Button>
+      <Button size="sm" onClick={() => void refresh()} isDisabled={busy || !types.length}>Load / refresh</Button>
       {busy && <Spinner size="md" aria-label="Loading resources" />}
     </div>
-    {view === 'networking' && <p className="resource-relationships__muted">Enable cluster-scoped types for nodes, NMState, GatewayClasses, egress assignments, and namespace selector evaluation. Click Load / refresh after changing scope. Network policy matches and configured references do not prove connectivity. Operator namespace defaults: openshift-ingress-operator and openshift-sriov-network-operator; enter another namespace above for custom installations.</p>}
+    {view === 'networking' && <p className="resource-relationships__muted">Enable cluster-scoped types for nodes, NMState, GatewayClasses, egress assignments, and namespace selector evaluation. Click Load / refresh after changing scope. Network policy matches and configured references do not prove connectivity. Operator namespace defaults: openshift-ingress-operator and openshift-sriov-network-operator; select another project above for custom installations. All projects lists across namespaces where your permissions allow.</p>}
     <details className="resource-relationships__types"><summary>Resource types ({enabled.length} selected)</summary>
       <p>Only selected types are loaded. Secrets are excluded; references to them are shown by name only.</p>
-      <div className="resource-relationships__typegrid">{types.map(t => <label key={typeKey(t)}>
+      <ul className="resource-relationships__type-list" aria-label="Resource types">{types.map(t => <li key={typeKey(t)}><label key={typeKey(t)}>
         <input type="checkbox" checked={enabled.includes(typeKey(t))} onChange={e => setEnabled(old => e.target.checked ? [...old, typeKey(t)] : old.filter(k => k !== typeKey(t)))} />
-        {typeKey(t)}{!t.namespaced ? ' (cluster)' : ''}
-      </label>)}</div>
+        {t.kind} — {typeKey(t)}{!t.namespaced ? ' (cluster)' : ''}
+      </label></li>)}</ul>
     </details>
     {[...discoveryWarnings, ...warnings].length > 0 && <details className="resource-relationships__warnings" open>
       <summary>Partial results / API notices ({discoveryWarnings.length + warnings.length})</summary>
@@ -174,8 +184,12 @@ export default function RelationshipsPage() {
     <div className="resource-relationships__split">
       <section className="resource-relationships__tree" aria-label="Relationship explorer">
         <div className="resource-relationships__toolbar">
-          <input aria-label="Search resources" placeholder="Filter by kind or name" value={search} onChange={e => setSearch(e.target.value)} disabled={Boolean(focused)} />
-          {focused && <Button variant="link" onClick={() => { setRoot(''); setSelected(undefined); }}>Back to resources</Button>}
+          <input className="resource-relationships__tree-filter" aria-label="Search resources" placeholder="Filter by kind or name" value={search} onChange={e => setSearch(e.target.value)} disabled={Boolean(focused)} />
+          {focused && <Button size="sm" variant="link" onClick={() => { setRoot(''); setSelected(undefined); }}>Back to resources</Button>}
+        </div>
+        <div className="resource-relationships__toolbar" aria-label="Tree expansion controls">
+          <Button size="sm" variant="secondary" isDisabled={!tree.length} onClick={() => expandTree('all')}>Expand all</Button>
+          <Button size="sm" variant="secondary" isDisabled={!tree.length} onClick={() => expandTree('open')}>Collapse all</Button>
         </div>
         {focused && <div className="resource-relationships__toolbar">
           <strong>{label(focused)}</strong>
@@ -186,7 +200,7 @@ export default function RelationshipsPage() {
         </div>}
         {!focused && matches.length > 150 && <Alert isInline variant="info" title={`Showing 150 of ${matches.length} matching objects. Narrow your search.`} />}
         {focused && <p className="resource-relationships__muted">Expansion is bounded to {depth} levels and 200 nodes. Focus a resource to explore beyond this limit. Hover over a relationship for its source field.</p>}
-        <TreeView key={`${root}/${direction}/${depth}`} aria-label="Resource relationships" data={tree} hasSelectableNodes
+        <TreeView className="resource-relationships__tree-control" key={`${view}/${root}/${direction}/${depth}/${treeCommand?.revision || 0}`} aria-label="Resource relationships" data={displayedTree} hasSelectableNodes
           activeItems={selected ? [selected] : []} onSelect={(_e, item) => setSelected(item)} />
         {!resources.length && !busy && <p>No resources loaded. Check your namespace, selected types, and API notices.</p>}
         {selectedUid && (graph.unresolved.get(selectedUid) || []).length > 0 && <div className="resource-relationships__unresolved">
@@ -196,7 +210,7 @@ export default function RelationshipsPage() {
       {editors.length ? <aside className="resource-relationships__editors" aria-label="YAML editor workspace">
         <h2>YAML editors</h2>
         <p className="resource-relationships__muted">Each tab keeps its own edits. * indicates unsaved changes. Refreshing the tree does not reload these tabs.</p>
-        <Tabs id="resource-yaml-tabs" activeKey={activeEditor} onSelect={(_e, key) => setActiveEditor(String(key))}
+        <Tabs className="resource-relationships__tabs" id="resource-yaml-tabs" activeKey={activeEditor} onSelect={(_e, key) => setActiveEditor(String(key))}
           onClose={(_e, key) => closeEditor(String(key))} isBox mountOnEnter={false} unmountOnExit={false}
           tabListAriaLabel="Open resource YAML editors">
           {editors.map(r => {
