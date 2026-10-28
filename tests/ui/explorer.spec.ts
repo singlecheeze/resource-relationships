@@ -26,7 +26,7 @@ test('right-click opens YAML; validation precedes save; stale edits survive conf
   await page.goto('/');
   await page.getByRole('button', { name: 'Load / refresh' }).click();
   await page.getByText('ConfigMap', { exact: true }).click();
-  const item = page.getByText('ConfigMap: settings', { exact: true });
+  const item = page.getByText('settings', { exact: true });
   await item.click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Open YAML' }).click();
   const yaml = page.getByRole('textbox', { name: 'Resource YAML', exact: true });

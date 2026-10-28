@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { AngleLeftIcon, AngleRightIcon } from '@patternfly/react-icons';
 import { Alert, Button, Spinner } from '@patternfly/react-core';
 import { canUpdate, errorText, getResource, updateResource } from '../lib/api';
 import { editableYaml, parseEdit } from '../lib/editor';
@@ -9,13 +10,15 @@ import { loadSchema } from '../lib/schema-api';
 import { ResourceAbout, EditorHelp } from './ResourceEditorHelp';
 import { ResourceExamples } from './ResourceExamples';
 
-type Props = { resource: LoadedResource; onState: (uid: string, dirty: boolean, busy: boolean) => void; onClose: () => void; onSaved: (r: LoadedResource) => void };
-export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
+type Props = { resource: LoadedResource; onState: (uid: string, dirty: boolean, busy: boolean) => void; onSaved: (r: LoadedResource) => void };
+export function YamlPane({ resource, onState, onSaved }: Props) {
+  const [examplesVisible, setExamplesVisible] = React.useState(true);
+  const examplesId = React.useId();
   const [schema, setSchema] = React.useState<SchemaBundle>();
-  const [schemaMessage, setSchemaMessage] = React.useState('Loading schema…');
+  const [schemaMessage, setSchemaMessage] = React.useState('');
   React.useEffect(() => {
     let active = true;
-    loadSchema(resource.type).then(result => { if (active) { setSchema(result); setSchemaMessage(result.source); } })
+    loadSchema(resource.type).then(result => { if (active) { setSchema(result); setSchemaMessage(''); } })
       .catch(() => { if (active) setSchemaMessage('Schema unavailable or access denied. YAML editing and server validation remain available.'); });
     return () => { active = false; };
   }, [resource.type]);
@@ -69,17 +72,15 @@ export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
   }
   return <aside className="resource-relationships__editor" aria-label="Resource YAML editor">
     <div className="resource-relationships__row">
-      <h2>YAML · {resource.object.kind}/{resource.object.metadata.name}</h2>
+      <h2>{resource.object.kind}/{resource.object.metadata.name}</h2>
       <EditorHelp />
-      <Button size="sm" variant="plain" onClick={onClose} isDisabled={busy} aria-label="Close YAML editor">Close</Button>
     </div>
-    <p>{resource.object.metadata.namespace || 'Cluster scoped'} · {allowed ? 'Editable' : 'Read-only'}{dirty ? ' · Unsaved changes' : ''}</p>
     <ResourceAbout resource={current || resource} schema={schema} />
     {message && <Alert isInline variant={failed ? 'danger' : 'success'} title={message} />}
     {busy && <Spinner size="md" aria-label="Loading or validating YAML" />}
-    <p className="resource-relationships__muted">{schemaMessage}</p>
+    {schemaMessage && <p className="resource-relationships__muted">{schemaMessage}</p>}
 
-    <div className="resource-relationships__editor-layout">
+    <div className={`resource-relationships__editor-layout${examplesVisible ? '' : ' resource-relationships__editor-layout--examples-hidden'}`}>
     <div className="resource-relationships__editor-main">
     <ConsoleYamlEditor value={text} readOnly={!allowed || busy} schema={schema}
       onChange={next => { setText(next); setReviewed(null); }}
@@ -90,7 +91,17 @@ export function YamlPane({ resource, onState, onClose, onSaved }: Props) {
       <Button size="sm" variant="link" isDisabled={busy} onClick={() => { if (!dirty || window.confirm('Discard unsaved YAML and reload from the server?')) void load(); }}>Reload YAML</Button>
     </div>
     </div>
-    <ResourceExamples type={resource.type} />
+    <div className="resource-relationships__divider resource-relationships__examples-divider">
+      <Button variant="plain" size="sm" className="resource-relationships__pane-toggle"
+        aria-label={examplesVisible ? 'Hide configuration examples' : 'Show configuration examples'}
+        title={examplesVisible ? 'Hide configuration examples' : 'Show configuration examples'}
+        aria-controls={examplesId} aria-expanded={examplesVisible}
+        icon={examplesVisible ? <AngleRightIcon aria-hidden="true" /> : <AngleLeftIcon aria-hidden="true" />}
+        onClick={() => setExamplesVisible(visible => !visible)} />
+    </div>
+    <div id={examplesId} hidden={!examplesVisible} className="resource-relationships__examples-pane">
+      <ResourceExamples type={resource.type} />
+    </div>
     </div>
   </aside>;
 }

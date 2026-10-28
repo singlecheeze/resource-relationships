@@ -55,8 +55,8 @@ async function scenario(allowed) {
   getByRole(doc.body, 'combobox', { name: 'Project' });
   assert.equal(getByRole(doc.body, 'list', { name: 'Resource types', hidden: true }).children.length, 3);
   fireEvent.click(getByText(doc.body, 'ConfigMap', { exact: true }).closest('li').querySelector('button'));
-  await wait(() => getByText(doc.body,'ConfigMap: settings',{exact:true}));
-  fireEvent.contextMenu(getByText(doc.body,'ConfigMap: settings',{exact:true}),{clientX:100,clientY:100});
+  await wait(() => getByText(doc.body,'settings',{exact:true}));
+  fireEvent.contextMenu(getByText(doc.body,'settings',{exact:true}),{clientX:100,clientY:100});
   fireEvent.click(await wait(() => getByRole(doc.body,'menuitem',{name:'Open YAML'})));
   const yaml = await wait(() => {
     const el = getByRole(doc.body,'textbox',{name:'Resource YAML',exact:true});
@@ -72,12 +72,45 @@ async function scenario(allowed) {
   fireEvent.click(button('Expand all'));
   await wait(() => assert.equal(getByText(doc.body, 'Service', { exact: true }).closest('li').getAttribute('aria-expanded'), 'true'));
   const originalDraft = yaml.value;
+  const treePane = getByRole(doc.body, 'region', { name: 'Relationship explorer' });
+  assert.ok(!queryByRole(doc.body, 'heading', { name: 'Resource Relationships', exact: true }));
+  const controls = getByRole(doc.body, 'region', { name: 'Explorer controls' });
+  assert.ok(treePane.contains(controls));
+  assert.ok(!treePane.contains(button('Hide tree')));
+  assert.ok(controls.contains(button('Load / refresh')));
+  assert.ok(controls.contains(getByRole(doc.body, 'textbox', { name: 'Search resources' })));
+  fireEvent.click(button('Hide tree'));
+  await wait(() => assert.equal(treePane.hidden, true));
+  assert.ok(getByRole(doc.body, 'textbox', { name: 'Resource YAML', exact: true }) === yaml);
+  assert.equal(yaml.value, originalDraft);
+  fireEvent.click(button('Show tree'));
+  await wait(() => assert.equal(treePane.hidden, false));
+  assert.equal(getByText(doc.body, 'ConfigMap', { exact: true }).closest('li').getAttribute('aria-expanded'), 'true');
   fireEvent.click(button('Store application settings'));
   const example = await wait(() => getByRole(doc.body, 'textbox', { name: 'Example YAML: Store application settings', exact: true }));
   assert.equal(example.readOnly, true);
   assert.equal(example.dataset.editorFullHeight, 'false');
   assert.equal(example.dataset.editorHeight, '352px');
   assert.ok(example.value.includes('LOG_LEVEL: info'));
+  getByRole(doc.body, 'heading', { name: 'YAML Editors', exact: true });
+  assert.ok(!queryByRole(doc.body, 'button', { name: 'Close YAML editor', exact: true }));
+  assert.ok(!queryByRole(doc.body, 'heading', { name: /^YAML ·/ }));
+  fireEvent.click(button('Hide configuration examples'));
+  await wait(() => assert.ok(!queryByRole(doc.body, 'textbox', { name: 'Example YAML: Store application settings', exact: true })));
+  assert.ok(getByRole(doc.body, 'textbox', { name: 'Resource YAML', exact: true }) === yaml);
+  assert.equal(yaml.value, originalDraft);
+  fireEvent.click(button('Show configuration examples'));
+  await wait(() => assert.ok(getByRole(doc.body, 'textbox', { name: 'Example YAML: Store application settings', exact: true }) === example));
+  for (const [name, text] of [
+    ['Configuration examples help', 'Expand a use case to view its YAML. Examples never change your draft or apply to the cluster.'],
+    ['YAML Editors help', 'Each tab keeps its own edits. * indicates unsaved changes. Refreshing the tree does not reload these tabs.'],
+  ]) {
+    fireEvent.mouseEnter(button(name));
+    await wait(() => getByText(getByRole(doc.body, 'tooltip'), text));
+    fireEvent.mouseLeave(button(name));
+    await wait(() => assert.ok(!queryByRole(doc.body, 'tooltip')));
+  }
+
   assert.equal(yaml.value, originalDraft);
   assert.equal(saves, 0); assert.equal(dryRuns, 0);
   fireEvent.keyDown(example, { key: 's', ctrlKey: true });
@@ -117,7 +150,7 @@ async function scenario(allowed) {
     await wait(() => getByText(doc.body,/Conflict: the object changed/));
     assert.ok(yaml.value.includes('another')); assert.equal(saves,1);
     // Open a second editor without discarding the first draft.
-    fireEvent.contextMenu(getByText(doc.body,'ConfigMap: other',{exact:true}),{clientX:100,clientY:100});
+    fireEvent.contextMenu(getByText(doc.body,'other',{exact:true, selector: '.resource-relationships__node'}),{clientX:100,clientY:100});
     fireEvent.click(await wait(() => getByRole(doc.body,'menuitem',{name:'Open YAML'})));
     const other = await wait(() => {
       const el = getByRole(doc.body,'textbox',{name:'Resource YAML',exact:true});
@@ -131,7 +164,7 @@ async function scenario(allowed) {
     assert.ok(yaml.value.includes('another'));
     assert.equal(button('About ConfigMap').getAttribute('aria-expanded'), 'true');
     // Reopening the same object selects it without duplicate tabs or re-fetching its draft.
-    fireEvent.contextMenu(getByText(doc.body,'ConfigMap: settings',{exact:true}),{clientX:100,clientY:100});
+    fireEvent.contextMenu(getByText(doc.body,'settings',{exact:true}),{clientX:100,clientY:100});
     fireEvent.click(await wait(() => getByRole(doc.body,'menuitem',{name:'Open YAML'})));
     await wait(() => assert.equal(getAllByRole(doc.body,'tab').length,2));
     assert.ok(yaml.value.includes('another'));
@@ -173,7 +206,7 @@ async function scenario(allowed) {
     const label = await wait(() => getByText(doc.body, name, { exact: true }));
     fireEvent.click(label.closest('li').querySelector('button'));
   }
-  await wait(() => getByText(doc.body, 'Service: demo-service', { exact: true }));
+  await wait(() => getByText(doc.body, 'demo-service', { exact: true }));
   fireEvent.change(getByRole(doc.body, 'combobox', { name: 'Project' }), { target: { value: '#ALL_NS#' } });
   fireEvent.click(button('Load / refresh'));
   await wait(() => getByText(doc.body, /Snapshot: All projects/));

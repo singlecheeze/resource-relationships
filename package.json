@@ -1,6 +1,6 @@
 {
   "name": "resource-relationships",
-  "version": "0.5.6",
+  "version": "0.5.11",
   "description": "Resource relationship explorer and YAML editor for OpenShift 4.22",
   "private": true,
   "license": "Apache-2.0",
@@ -43,7 +43,7 @@
   },
   "consolePlugin": {
     "name": "resource-relationships",
-    "version": "0.5.6",
+    "version": "0.5.11",
     "displayName": "Resource Relationships",
     "description": "Resource relationship explorer and YAML editor for OpenShift 4.22",
     "exposedModules": {

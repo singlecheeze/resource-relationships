@@ -1,10 +1,12 @@
 import * as React from 'react';
+import { AngleLeftIcon, AngleRightIcon } from '@patternfly/react-icons';
 import { NamespaceBar, useActiveNamespace, isAllNamespacesKey } from '@openshift-console/dynamic-plugin-sdk';
 import { Alert, Button, Spinner, TreeView, Tabs, Tab, TabTitleText } from '@patternfly/react-core';
 import type { TreeViewDataItem } from '@patternfly/react-core';
 import { defaultTypes, discover, errorText, loadResources } from '../lib/api';
 import { buildGraph, walkGraph, WalkNode } from '../lib/graph';
 import { LoadedResource, ResourceType, typeKey } from '../lib/model';
+import { InfoHelp } from './ResourceEditorHelp';
 import { YamlPane } from './YamlPane';
 import { networkGroup, networkGroups, networkTypes } from '../lib/networking';
 import { bulkTreeExpansion, ResourceTreeItem } from '../lib/tree-expansion';
@@ -14,6 +16,18 @@ import './relationships.css';
 type Menu = { uid: string; x: number; y: number };
 export default function RelationshipsPage() {
   const [treeCommand, setTreeCommand] = React.useState<{ mode: 'all' | 'open'; revision: number }>();
+  const [treeVisible, setTreeVisible] = React.useState(true);
+  const pageRef = React.useRef<HTMLElement>(null);
+  const [treeHeight, setTreeHeight] = React.useState('calc(100dvh - 100px)');
+  React.useLayoutEffect(() => {
+    const measure = () => {
+      const top = Math.max(0, pageRef.current?.getBoundingClientRect().top || 0);
+      setTreeHeight(`${Math.max(200, window.innerHeight - top - 8)}px`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
   const [view, setView] = React.useState('all');
   const [infra, setInfra] = React.useState(true);
   const [types, setTypes] = React.useState<ResourceType[]>([]);
@@ -108,7 +122,8 @@ export default function RelationshipsPage() {
     } catch (e) { if (id === generation.current) setWarnings([errorText(e)]); }
     finally { if (id === generation.current) setBusy(false); }
   }
-  const label = (r: LoadedResource) => `${r.object.kind}: ${r.object.metadata.name}${r.object.metadata.namespace && r.object.metadata.namespace !== loadedScope ? ` (${r.object.metadata.namespace})` : ''}`;
+  const objectLabel = (r: LoadedResource) => `${r.object.metadata.name}${r.object.metadata.namespace && r.object.metadata.namespace !== loadedScope ? ` (${r.object.metadata.namespace})` : ''}`;
+  const label = (r: LoadedResource) => `${r.object.kind}: ${objectLabel(r)}`;
   const renderNode = (n: WalkNode, path: string): ResourceTreeItem => {
     const r = graph.nodes.get(n.uid)!;
     const id = `${path}/${n.uid}`;
@@ -123,7 +138,7 @@ export default function RelationshipsPage() {
           }
         }} tabIndex={0} title={n.edge?.evidence}>
         {n.edge && <span className="resource-relationships__relation">{n.reverse ? `← ${n.edge.relation} — ` : `${n.edge.relation} → `}</span>}
-        {label(r)}{n.cycle ? ' ↩ already in path' : ''}
+        {objectLabel(r)}{n.cycle ? ' ↩ already in path' : ''}
       </span>,
       action: <button className="resource-relationships__more" aria-label={`Actions for ${label(r)}`} onClick={e => {
         e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); showMenu(n.uid, rect.left, rect.bottom);
@@ -154,18 +169,23 @@ export default function RelationshipsPage() {
   const displayedTree = treeCommand ? bulkTreeExpansion(tree, treeCommand.mode, new Set(editors.map(r => r.object.metadata.uid))) : tree;
   const expandTree = (mode: 'all' | 'open') => setTreeCommand(old => ({ mode, revision: (old?.revision || 0) + 1 }));
   const selectedUid = selected?.id?.split('/').at(-1);
-  return <main className="resource-relationships__page">
-    <h1>Resource Relationships</h1>
-    <p>Explore ownership and references. Right-click a resource, or use its ⋮ menu, to open YAML or follow its relationships.</p>
-    <NamespaceBar />
+  return <main ref={pageRef} className="resource-relationships__page" aria-label="Resource Relationships">
+    <div className={`resource-relationships__split${treeVisible ? '' : ' resource-relationships__split--tree-hidden'}`}>
+      <section id="relationship-tree-pane" className="resource-relationships__tree" aria-label="Relationship explorer" hidden={!treeVisible} style={{ height: treeHeight }}>
+        <section aria-label="Explorer controls" className="resource-relationships__controls">
+    <div className="resource-relationships__project-row">
+      <div className="resource-relationships__project-select"><NamespaceBar /></div>
+      <Button size="sm" onClick={() => void refresh()} isDisabled={busy || !types.length}>Load / refresh</Button>    </div>
     <div className="resource-relationships__toolbar">
       <label>View <select aria-label="Explorer view" value={view} onChange={e => { setView(e.target.value); setTreeCommand(undefined); setRoot(''); setSelected(undefined); }}>
         <option value="all">All resources</option><option value="networking">Networking</option>
       </select></label>
 
+    </div>
+    <div className="resource-relationships__toolbar">
       <label><input type="checkbox" checked={cluster} onChange={e => setCluster(e.target.checked)} /> Include selected cluster-scoped types</label>
       {view === 'networking' && <label><input type="checkbox" checked={infra} onChange={e => setInfra(e.target.checked)} /> Include ingress / SR-IOV operator namespaces</label>}
-      <Button size="sm" onClick={() => void refresh()} isDisabled={busy || !types.length}>Load / refresh</Button>
+
       {busy && <Spinner size="md" aria-label="Loading resources" />}
     </div>
     {view === 'networking' && <p className="resource-relationships__muted">Enable cluster-scoped types for nodes, NMState, GatewayClasses, egress assignments, and namespace selector evaluation. Click Load / refresh after changing scope. Network policy matches and configured references do not prove connectivity. Operator namespace defaults: openshift-ingress-operator and openshift-sriov-network-operator; select another project above for custom installations. All projects lists across namespaces where your permissions allow.</p>}
@@ -181,13 +201,10 @@ export default function RelationshipsPage() {
       <ul>{[...discoveryWarnings, ...warnings].map((w, i) => <li key={i}>{w}</li>)}</ul>
     </details>}
     <p className="resource-relationships__muted">{loadedScope ? `Snapshot: ${loadedScope} · ${resources.length} objects · ${graph.edges.length} relationships. Refresh to update.` : 'Choose a namespace and load resources.'} Relationships are limited to loaded, authorized resources.</p>
-    <div className="resource-relationships__split">
-      <section className="resource-relationships__tree" aria-label="Relationship explorer">
-        <div className="resource-relationships__toolbar">
+        <div className="resource-relationships__toolbar resource-relationships__filter-row" aria-label="Tree expansion controls">
           <input className="resource-relationships__tree-filter" aria-label="Search resources" placeholder="Filter by kind or name" value={search} onChange={e => setSearch(e.target.value)} disabled={Boolean(focused)} />
           {focused && <Button size="sm" variant="link" onClick={() => { setRoot(''); setSelected(undefined); }}>Back to resources</Button>}
-        </div>
-        <div className="resource-relationships__toolbar" aria-label="Tree expansion controls">
+
           <Button size="sm" variant="secondary" isDisabled={!tree.length} onClick={() => expandTree('all')}>Expand all</Button>
           <Button size="sm" variant="secondary" isDisabled={!tree.length} onClick={() => expandTree('open')}>Collapse all</Button>
         </div>
@@ -200,16 +217,29 @@ export default function RelationshipsPage() {
         </div>}
         {!focused && matches.length > 150 && <Alert isInline variant="info" title={`Showing 150 of ${matches.length} matching objects. Narrow your search.`} />}
         {focused && <p className="resource-relationships__muted">Expansion is bounded to {depth} levels and 200 nodes. Focus a resource to explore beyond this limit. Hover over a relationship for its source field.</p>}
+        </section>
+        <div className="resource-relationships__tree-scroll">
         <TreeView className="resource-relationships__tree-control" key={`${view}/${root}/${direction}/${depth}/${treeCommand?.revision || 0}`} aria-label="Resource relationships" data={displayedTree} hasSelectableNodes
           activeItems={selected ? [selected] : []} onSelect={(_e, item) => setSelected(item)} />
         {!resources.length && !busy && <p>No resources loaded. Check your namespace, selected types, and API notices.</p>}
         {selectedUid && (graph.unresolved.get(selectedUid) || []).length > 0 && <div className="resource-relationships__unresolved">
           <h3>Reference and rule details</h3><ul>{graph.unresolved.get(selectedUid)!.map((x, i) => <li key={i}>{x}</li>)}</ul>
         </div>}
+        </div>
       </section>
+      <div className="resource-relationships__divider" style={{ height: treeHeight }}>
+        <Button size="sm" variant="plain" className="resource-relationships__pane-toggle"
+          aria-label={treeVisible ? 'Hide tree' : 'Show tree'} title={treeVisible ? 'Collapse explorer pane' : 'Expand explorer pane'}
+          aria-controls="relationship-tree-pane" aria-expanded={treeVisible}
+          icon={treeVisible ? <AngleLeftIcon aria-hidden="true" /> : <AngleRightIcon aria-hidden="true" />}
+          onClick={() => { setMenu(undefined); setTreeVisible(visible => !visible); }} />
+      </div>
+      <div className="resource-relationships__right-pane">
+
       {editors.length ? <aside className="resource-relationships__editors" aria-label="YAML editor workspace">
-        <h2>YAML editors</h2>
-        <p className="resource-relationships__muted">Each tab keeps its own edits. * indicates unsaved changes. Refreshing the tree does not reload these tabs.</p>
+        <div className="resource-relationships__row"><h2>YAML Editors</h2>
+          <InfoHelp label="YAML Editors help">Each tab keeps its own edits. * indicates unsaved changes. Refreshing the tree does not reload these tabs.</InfoHelp>
+        </div>
         <Tabs className="resource-relationships__tabs" id="resource-yaml-tabs" activeKey={activeEditor} onSelect={(_e, key) => setActiveEditor(String(key))}
           onClose={(_e, key) => closeEditor(String(key))} isBox mountOnEnter={false} unmountOnExit={false}
           tabListAriaLabel="Open resource YAML editors">
@@ -218,13 +248,14 @@ export default function RelationshipsPage() {
             const name = `${r.object.kind}/${r.object.metadata.namespace || '(cluster)'}/${r.object.metadata.name}`;
             return <Tab key={uid} eventKey={uid} title={<TabTitleText>{name}{editorStates[uid]?.dirty ? ' *' : ''}</TabTitleText>}
               closeButtonAriaLabel={`Close ${name}`} isCloseDisabled={editorStates[uid]?.busy ?? true}>
-              <YamlPane resource={r} onState={onEditorState} onClose={() => closeEditor(uid)}
+              <YamlPane resource={r} onState={onEditorState}
                 onSaved={saved => setResources(old => old.map(item => item.object.metadata.uid === saved.object.metadata.uid ? saved : item))} />
             </Tab>;
           })}
         </Tabs>
       </aside>
         : <aside className="resource-relationships__empty"><h2>Inspect and edit YAML</h2><p>Right-click a resource and choose <strong>Open YAML</strong>. Each resource opens in its own editor tab here.</p><p>Edits use your current OpenShift permissions.</p></aside>}
+      </div>
     </div>
     {menu && <div ref={menuRef} role="menu" aria-label="Resource actions" className="resource-relationships__menu" style={{ left: menu.x, top: menu.y }} onKeyDown={e => {
       const buttons = [...e.currentTarget.querySelectorAll('button')];

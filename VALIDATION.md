@@ -1,4 +1,4 @@
-# Validation — v0.5.6
+# Validation — v0.5.11
 
 Target: OpenShift console 4.22, React 18, PatternFly 6. This package has not been deployed to a live OpenShift cluster in this session.
 
@@ -24,7 +24,7 @@ Target: OpenShift console 4.22, React 18, PatternFly 6. This package has not bee
 
 ## Cluster acceptance procedure
 
-1. Build/deploy v0.5.6 using README.md, confirm rollout and refresh the console. Open Home → Resource Relationships; check for browser errors.
+1. Build/deploy v0.5.11 using README.md, confirm rollout and refresh the console. Open Home → Resource Relationships; check for browser errors.
 2. Select Networking, enter your application namespace, include cluster-scoped types and operator namespaces, and refresh. Verify purpose groups appear beneath project and cluster scopes. Missing optional operators/APIs should not stop loading. Forbidden APIs should produce notices.
 3. Verify Route/Ingress → Service → EndpointSlice → Pod, Gateway route parent/backend references, NetworkPolicy selectors, and Multus requested/reported attachments against `oc get ... -o yaml`. Do not interpret edges as a connectivity verdict.
 4. Verify EgressIP selected Pods and `status.items` node assignments; EgressFirewall destinations; NNCP selected nodes → NNCE labels/status; Node → NodeNetworkState; ingress controller admitted routes and SR-IOV objects where installed. For custom operator namespaces, enter the namespace explicitly.
@@ -49,14 +49,34 @@ No network infrastructure edits were sent to your cluster. Test saves on disposa
 
 Both editor variants supply explicit height and disable the console’s default full-height mode. Regression checks verify these props reach the host editor in the DOM harness. The harness substitutes a textarea and cannot establish Monaco geometry; live-console verification remains required, including tab switching, resize, and expanding/collapsing examples.
 
-## v0.5.6 density, gutters, and shortcut tooltip
+## v0.5.11 density, gutters, and shortcut tooltip
 
 Compact mode is unconditional. Tests confirm the removed toggle stays absent and verify that hovering the help button shows actual shortcut descriptions; click-open instructions remain covered. TypeScript, unit/static tests, DOM scenarios and the production build are checked. The DOM harness substitutes a textarea, so actual tree geometry and Monaco gutters still require live-console visual verification.
 
-## v0.5.6 tree controls
+## v0.5.11 tree controls
 
 Two unit tests verify all-branch expansion, preservation of every open-resource occurrence and ancestor, inactive open tabs, unrelated descendant collapse, absent open resources, and input immutability. DOM checks verify bulk collapse retains an open ConfigMap path while collapsing Service, bulk expand reopens Service, and the YAML editor remains mounted. Live-console verification of icons, scroll behavior and arrow interaction remains required.
 
-## v0.5.6 project selection and collapsed defaults
+## v0.5.11 project selection and collapsed defaults
 
 TypeScript validates the native NamespaceBar/useActiveNamespace/isAllNamespacesKey SDK integration. DOM scenarios assert initial collapsed kinds and the full discovered resource-type list, and continue testing expansion, open-tab preservation and editing. The preview project dropdown is a test substitute: native project search/favorites, host navigation behavior and real-browser widths require live-console acceptance. All-project loading uses the existing paginated all-namespace collection path and remains subject to RBAC.
+
+## v0.5.11 pane layout
+
+DOM checks verify the top title is absent, controls and filter are in the right pane, hide/show toggles the tree without remounting the YAML editor, and tree expansion survives. TypeScript, unit/static tests and production compilation remain required. Actual viewport height, host-header offsets, responsive layout and native Monaco resizing must be visually checked in the console; JSDOM does not perform layout.
+
+## v0.5.11 left controls and divider
+
+DOM checks verify explorer controls are inside the left pane, the hide/show toggle is outside it, and hiding/restoring retains editor identity, text, and tree expansion. TypeScript, 28 unit/static tests, both DOM scenarios and production build are checked. Live-console acceptance must verify the native project dropdown within the narrower row, overflow, divider placement, responsive wrapping, and Monaco resizing.
+
+## v0.5.11 sizing adjustments
+
+TypeScript, the 28 unit/static tests, and existing DOM hide/show/editor-retention scenarios are checked. Production compilation is checked. This is a CSS geometry correction: the mocked project selector and JSDOM cannot verify native toggle truncation or exact pixel alignment. Verify long project names, dropdown opening, divider centering, narrow widths, and both themes on the cluster.
+
+## v0.5.11 object labels
+
+Updated DOM scenarios locate objects by their unprefixed names and exercise context menus, opening tabs, saving, and networking inventory. TypeScript and production compilation are checked. Live-console visual verification remains required.
+
+## v0.5.11 validation
+
+TypeScript, 28 unit/static tests, both DOM scenarios, and production webpack build passed. DOM coverage checks the examples collapse/restore preserves the mounted editor and expanded viewer, both help tooltips render their text, and the redundant close button and heading prefix are absent. Real OpenShift browser layout was not verified.

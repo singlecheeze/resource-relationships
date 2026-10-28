@@ -18,7 +18,7 @@ This is custom demo software, not a Red Hat supported product. The source, depen
 - Retains resource UID and resourceVersion; stale updates return conflicts and preserve your text.
 - Saves through the console's Kubernetes API proxy, with your logged-in permissions. There is no privileged backend or etcd connection.
 
-## Resource descriptions and editor help (v0.5.6)
+## Resource descriptions and editor help (v0.5.11)
 
 Each YAML tab now includes **About KIND**, a PatternFly expandable section with a chevron, directly above the editor. Expand it to see a plain-language overview, API version, and scope. The section remembers its expanded state independently in each mounted tab.
 
@@ -97,7 +97,7 @@ Prerequisites: OpenShift 4.22, `oc`, Python 3, cluster-admin access for installi
 Extract this archive and enter its directory:
 
 ```bash
-unzip resource-relationships-v0.5.6.zip
+unzip resource-relationships-v0.5.11.zip
 cd resource-relationships
 oc login https://api.YOUR-CLUSTER:6443
 
@@ -112,7 +112,7 @@ oc start-build resource-relationships -n resource-relationships \
   --from-dir="$build_context" --follow --wait
 rm -rf "$build_context"
 
-export IMAGE=image-registry.openshift-image-registry.svc:5000/resource-relationships/resource-relationships:v0.5.6
+export IMAGE=image-registry.openshift-image-registry.svc:5000/resource-relationships/resource-relationships:v0.5.11
 bash scripts/deploy.sh
 ```
 
@@ -133,7 +133,7 @@ If the build fails, inspect `oc logs -n resource-relationships build/BUILD-NAME`
 This performs the full source build in a container. It needs network access to npm and the UBI registries.
 
 ```bash
-export IMAGE=quay.io/YOUR-ORGANIZATION/resource-relationships:v0.5.6
+export IMAGE=quay.io/YOUR-ORGANIZATION/resource-relationships:v0.5.11
 podman build --platform linux/amd64 -t "$IMAGE" .
 podman push "$IMAGE"
 bash scripts/deploy.sh
@@ -295,7 +295,7 @@ Based on the Apache-2.0 OpenShift console plugin template; its LICENSE is retain
 
 ## Upgrade from v0.1.0, v0.2.0, or v0.3.0
 
-Rebuild the image from this package and deploy it with the new `v0.5.6` tag. For the in-cluster workflow, reapply `deploy/build.yaml` (its output tag is now v0.5.6), submit the new `dist/` and `Dockerfile.prebuilt`, and run `scripts/deploy.sh` with IMAGE ending in `:v0.5.6`. The ConsolePlugin name and route are unchanged. Save any open drafts before refreshing the console to load the new plugin.
+Rebuild the image from this package and deploy it with the new `v0.5.11` tag. For the in-cluster workflow, reapply `deploy/build.yaml` (its output tag is now v0.5.11), submit the new `dist/` and `Dockerfile.prebuilt`, and run `scripts/deploy.sh` with IMAGE ending in `:v0.5.11`. The ConsolePlugin name and route are unchanged. Save any open drafts before refreshing the console to load the new plugin.
 
 ## v0.5.1 serving-image permissions fix
 
@@ -303,7 +303,7 @@ Both Dockerfiles explicitly normalize static assets to mode 0644 and directories
 
 The nginx entrypoint uses `-e stderr` so startup logging does not attempt the compiled-in `/var/log/nginx/error.log` path before the mounted configuration is loaded. The configuration already sends runtime logs to stdout/stderr and puts temporary files and the PID in the writable `/tmp` volume.
 
-If v0.5.0 returns 403 for `/plugin-manifest.json`, rebuild from this package and deploy the new v0.5.6 tag using the quick-deployment commands above. Restarting the old image cannot fix its filesystem permissions. Do not disable the read-only filesystem or grant an anyuid SCC for this fix.
+If v0.5.0 returns 403 for `/plugin-manifest.json`, rebuild from this package and deploy the new v0.5.11 tag using the quick-deployment commands above. Restarting the old image cannot fix its filesystem permissions. Do not disable the read-only filesystem or grant an anyuid SCC for this fix.
 
 After deployment, check `oc logs -n resource-relationships deployment/resource-relationships -c plugin --tail=50`. Readiness requests should return 200. For further diagnosis, run:
 
@@ -315,26 +315,58 @@ oc exec -n resource-relationships deployment/resource-relationships -c plugin --
 
 The editable CodeEditor now receives an explicit viewport-relative height, bounded between 320px and 800px, with `isFullHeight={false}`. Example viewers use an explicit 352px height with the same setting. This avoids the console editor’s default percentage-height mode inside an auto-height grid, which could leave a tall outer shell but a collapsed Monaco text area. Existing native themes, schema suggestions, drafts, and save behavior are unchanged.
 
-Rebuild and deploy the v0.5.6 image using the instructions above, then refresh the console. Verify the visible text area, switching resource tabs, resizing the browser, and expanding examples. This release retains the v0.5.1 serving-image permission and logging fixes.
+Rebuild and deploy the v0.5.11 image using the instructions above, then refresh the console. Verify the visible text area, switching resource tabs, resizing the browser, and expanding examples. This release retains the v0.5.1 serving-image permission and logging fixes.
 
-## Compact layout and help (v0.5.6)
+## Compact layout and help (v0.5.11)
 
 Compact spacing is now the only layout. The checkbox, density state, and local-storage preference handling have been removed. Tree lists no longer inherit extra left padding; hierarchy is retained with a 16px nested indent. Both native YAML editors use a narrower three-character line-number gutter, no unused glyph margin, and an 8px decoration gutter while retaining folding and diagnostics.
 
 Hover or focus the circled question mark to see shortcuts and their meanings, including suggestions, acceptance, dismissal, find, undo, and validated save. Click it for the full editing/save instructions. Editor heights and text size are unchanged.
 
-Deploy with the standalone script: `bash deploy-resource-relationships.sh resource-relationships-v0.5.6.zip`.
+Deploy with the standalone script: `bash deploy-resource-relationships.sh resource-relationships-v0.5.11.zip`.
 
-## Tree expansion and icons (v0.5.6)
+## Tree expansion and icons (v0.5.11)
 
 **Expand all** and **Collapse all** appear above the tree. Expand opens all branches in the currently loaded/filtered tree; existing inventory and relationship depth/node limits still apply. Collapse retains every visible path to resources with open YAML tabs (including inactive tabs), and keeps those resource nodes expanded. Unrelated branches collapse. Individual arrows remain usable afterward; bulk actions do not close tabs or reset drafts.
 
 Parent labels use native PatternFly icons: network connections, storage databases, policy shields, infrastructure servers, workload stacks, scheduled-job clocks, AI robots, configuration gears, and project folders. Relationship groups and unknown kinds also receive suitable fallback icons. Icons are decorative; text labels remain accessible.
 
-## Project selector and inventory layout (v0.5.6)
+## Project selector and inventory layout (v0.5.11)
 
 The plugin uses the console SDK's native NamespaceBar and active namespace state, matching the host project selector rather than maintaining a separate textbox. Select a project, then Load / refresh. All projects uses all-namespace list requests with the same RBAC and pagination handling; optional operator namespaces are not fetched twice. Existing YAML tabs keep their own namespaces and drafts when changing projects. The Snapshot label identifies the scope actually loaded.
 
 New trees start collapsed. Refresh collapses unrelated branches while retaining paths to open tabs; Expand all and Collapse all remain available. The kind/name filter fills the tree pane width. Resource types are a scrollable, single-column checklist of all discovered list/get-capable resource types, with kind, API resource/group and scope. Existing exclusions (Secrets and subresources) remain in effect.
 
-Deploy: `bash deploy-resource-relationships.sh resource-relationships-v0.5.6.zip`.
+Deploy: `bash deploy-resource-relationships.sh resource-relationships-v0.5.11.zip`.
+
+## Hideable full-height tree (v0.5.11)
+
+The visible page title and introduction are removed. Project selection, inventory controls, resource types, notices, search, expansion and relationship controls now occupy the right-hand pane above the YAML workspace. The left pane begins at the top of the page and measures the remaining viewport height, with its own scroll area.
+
+Use **Hide tree** to give the YAML workspace the full width, and **Show tree** to restore it. The tree stays mounted, retaining expansion and selection; editor tabs and drafts also remain mounted. On narrow screens the controls/editor appear first and the visible tree is capped at 40% of viewport height to keep both areas usable. Height adapts on window resize; native Monaco automatic layout adapts to the width change.
+
+Deploy: `bash deploy-resource-relationships.sh resource-relationships-v0.5.11.zip`.
+
+## Explorer controls and divider toggle (v0.5.11)
+
+The left pane now contains Project and Load / refresh on the first row, View on the next, the cluster-scope checkbox below, followed by Resource types. Search and Expand all / Collapse all share a final toolbar row, wrapping on narrow panes. Network-specific controls and notices remain with the explorer. Tree items scroll separately below these controls.
+
+An icon-only PatternFly button on the pane divider collapses or restores the entire explorer. Its arrow changes direction and its accessible label identifies the action. The divider remains available when collapsed. It provides pane toggling, not drag resizing; no Kendo or jQuery dependency is added. YAML tabs and the empty editor prompt remain on the right. Hiding the explorer preserves tree state and drafts.
+
+Deploy: `bash deploy-resource-relationships.sh resource-relationships-v0.5.11.zip`.
+
+## Project width and divider alignment (v0.5.11)
+
+The native project selector and its inner toggle fill the remaining row width up to Load / refresh. Scoped rules remove the host control’s width constraint without changing other console project selectors. The pane divider is reduced from a 28px track plus gaps to 20px with no adjacent gaps. Its arrow button uses explicit flex centering and a 32px height; the narrow-screen divider height follows the tree’s viewport cap. Outer top padding is reduced to 4px.
+
+Deploy: `bash deploy-resource-relationships.sh resource-relationships-v0.5.11.zip`.
+
+## Object labels (v0.5.11)
+
+Tree object labels now show the resource name without a repeated kind prefix. Parent kind groups, editor tabs, action accessibility labels, and kind-based filtering retain kind information. Namespace suffixes remain when needed to distinguish objects across projects; relationship labels and cycle markers are unchanged.
+
+Deploy: `bash deploy-resource-relationships.sh resource-relationships-v0.5.11.zip`.
+
+## v0.5.11 editor layout
+
+Configuration examples can be hidden or shown with their divider chevron without resetting drafts or expanded use cases. Guidance lives in question-circle tooltips beside Configuration examples and YAML Editors. Removed the duplicate editor Close button, YAML heading prefix, namespace/editability line, and successful schema-source line. Tab close controls and schema failure notices remain.

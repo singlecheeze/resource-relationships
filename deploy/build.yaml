@@ -21,6 +21,6 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: resource-relationships:v0.5.6
+      name: resource-relationships:v0.5.11
   successfulBuildsHistoryLimit: 2
   failedBuildsHistoryLimit: 2

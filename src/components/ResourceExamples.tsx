@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ExpandableSection } from '@patternfly/react-core';
 import { CodeEditor } from '@openshift-console/dynamic-plugin-sdk';
+import { InfoHelp } from './ResourceEditorHelp';
 import { ResourceType } from '../lib/model';
 import { resourceExamples, ResourceExample } from '../lib/resource-examples';
 
@@ -26,10 +27,14 @@ function ExampleSection({ example }: { example: ResourceExample }) {
 export function ResourceExamples({ type }: { type: ResourceType }) {
   const { examples, explanation } = resourceExamples(type);
   return <section className="resource-relationships__examples" aria-label={`Configuration examples for ${type.kind}`}>
-    <h3>Configuration examples</h3>
-    <p className="resource-relationships__muted">{examples.length ? 'Expand a use case to view its YAML. Examples never change your draft or apply to the cluster.' : 'No curated examples are available for this API kind yet.'}</p>
+    <div className="resource-relationships__row"><h3>Configuration examples</h3>
+      <InfoHelp label="Configuration examples help">
+        <p>Expand a use case to view its YAML. Examples never change your draft or apply to the cluster.</p>
+        <p>Replace example values and check your installed API schema. Fragments omit required fields; merge only the intended fields into a complete configuration.</p>
+      </InfoHelp>
+    </div>
+    <p className="resource-relationships__muted">{!examples.length && 'No curated examples are available for this API kind yet.'}</p>
     {explanation && <p>{explanation}</p>}
-    {examples.length > 0 && <p className="resource-relationships__muted">Replace example values and check your installed API schema. Fragments omit required fields; merge only the intended fields into a complete configuration.</p>}
     {examples.map(example => <ExampleSection key={example.id} example={example} />)}
   </section>;
 }

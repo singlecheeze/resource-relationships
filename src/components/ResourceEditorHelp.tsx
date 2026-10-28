@@ -64,3 +64,10 @@ export function EditorHelp() {
     </Tooltip>
   </Popover>;
 }
+
+export function InfoHelp({ label, children }: { label: string; children: React.ReactNode }) {
+  return <Tooltip maxWidth="34rem" content={<div className="resource-relationships__shortcut-tip">{children}</div>}>
+    <Button variant="plain" aria-label={label} className="resource-relationships__help-button"
+      icon={<QuestionCircleIcon aria-hidden="true" />} />
+  </Tooltip>;
+}
