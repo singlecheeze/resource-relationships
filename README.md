@@ -3,6 +3,7 @@
 A React 18 / TypeScript / PatternFly 6 console plugin for **OpenShift 4.22**. Browse resources, inspect ownership and references, then right-click an object and choose **Open YAML** to view/edit it in a right-hand pane.
 
 This is custom demo software, not a Red Hat supported product. The source, dependency lockfile, compiled plugin assets, deployment template, optional in-cluster build configuration, tests, and removal scripts are included. Cluster installation and real API behavior still require verification on your cluster; see `VALIDATION.md`.
+<img width="2528" height="1277" alt="image" src="https://github.com/user-attachments/assets/15c0a7e2-21e0-432d-9028-7000231384f5" />
 
 ## What it does
 
